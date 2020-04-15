@@ -1,8 +1,10 @@
+import pdb
 import numpy as np
 from toposort import toposort_flatten
 from collections import defaultdict
 
-import pgmpy.readwrite import BIFReader
+from pgmpy.readwrite import BIFReader
+from pgmpy.factors.discrete import TabularCPD
 
 class BnNetwork():
     '''
@@ -23,6 +25,7 @@ class BnNetwork():
         #Reading the model from the file
         reader=BIFReader(modelpath)
         #Initializing the base graph
+        print("Initializing the base_graph")
         self._initialize_base_graph(reader)
 
     def _initialize_base_graph(self,reader):
@@ -39,8 +42,8 @@ class BnNetwork():
         edges=reader.get_edges()
         #Getting the topological order and adjacency list
         adj_set=defaultdict(set)
-        for from,to in edges:
-            adj_set[from].add(to)
+        for fr,to in edges:
+            adj_set[fr].add(to)
         topo_nodes=toposort_flatten(adj_set)
         topo_i2n={i:node for i,node in enumerate(topo_nodes)}
         topo_n2i={node:i for i,node in enumerate(topo_nodes)}
@@ -48,7 +51,7 @@ class BnNetwork():
         #Adding the property to class
         self.base_graph=base_graph
         self.nodes=nodes
-        self.card_node=model.get_cardinality()
+        self.card_node=base_graph.get_cardinality()
         self.edges=edges
         self.topo_i2n=topo_i2n
         self.topo_n2i=topo_n2i
@@ -61,6 +64,7 @@ class BnNetwork():
 
         node_cat is zero indexed
         '''
+        print("Creating intervention Graph")
         #Getting the name of node
         node=self.topo_i2n[node_idx]
         assert node_cat<self.card_node[node],"category index out of bound!!"
@@ -68,28 +72,40 @@ class BnNetwork():
         #Copying the model first of all
         do_graph=self.base_graph.copy()
         #Now saving the cpds of the children of current node
-        node_cpd=do_graph.get_cpds(node).copy()
-        child_old_cpds=[do_graph.get_cpds(child) for child in adj_set[node]]
-        child_cpds=[do_graph.get_cpds(child).copy() for child in adj_set[node]]
+        child_old_cpds=[do_graph.get_cpds(child).copy() for child in self.adj_set[node]]
+        # pdb.set_trace()
 
         #Now we will perform the do operation
         do_graph.remove_node(node)
         #But this has removed all node and children connection. Readd
-        for child in adj_set[node]:
+        do_graph.add_node(node)
+        for child in self.adj_set[node]:
             do_graph.add_edge(node,child)
         #Now we will add the cpds of childrens
-        do_graph.remove_cpds(child_old_cpds)
-        do_graph.add_cpds(child_cpds)
+        child_cur_cpds=[do_graph.get_cpds(child) for child in self.adj_set[node]]
+        for cur_cpds,old_cpds in zip(child_cur_cpds,child_old_cpds):
+            do_graph.remove_cpds(cur_cpds)
+            do_graph.add_cpds(old_cpds)
 
         #Now we have to change the cpd of current node
-        node_parents=(node_cpd.variables).remove(node_cpd.variable)
-        node_cpd.marginalize(node_parents)
         #Set the probability of intervented category to 1
-        node_cpd.values=np.zeros(self.card_node[node])
+        node_cpd=TabularCPD(node,
+                            self.card_node[node],
+                            np.zeros((1,self.card_node[node])))
         node_cpd.values[node_cat]=1.0
         #Add this cpd to graph
         do_graph.add_cpds(node_cpd)
+        # pdb.set_trace()
 
         #Finally testing the model
         do_graph.check_model()
         return do_graph
+
+if __name__=="__main__":
+    #Testing the base model and intervention
+    modelpath="dataset/alarm.bif"
+    network=BnNetwork(modelpath)
+
+    #Testing internvention
+    do_graph=network.generate_intervention_graph(15,1)
+    # pdb.set_trace()

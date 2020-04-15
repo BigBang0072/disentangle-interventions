@@ -3,3 +3,4 @@ temp
 *.pyc
 *.txt
 *.png
+*.DS_Store
