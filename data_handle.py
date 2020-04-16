@@ -42,9 +42,12 @@ class BnNetwork():
         edges=reader.get_edges()
         #Getting the topological order and adjacency list
         adj_set=defaultdict(set)
+        inv_adj_set=defaultdict(set)
         for fr,to in edges:
             adj_set[fr].add(to)
-        topo_nodes=toposort_flatten(adj_set)
+            inv_adj_set[to].add(fr)
+        #BEWARE: this function take inverse adj_list
+        topo_nodes=toposort_flatten(inv_adj_set)
         topo_i2n={i:node for i,node in enumerate(topo_nodes)}
         topo_n2i={node:i for i,node in enumerate(topo_nodes)}
 
@@ -57,10 +60,26 @@ class BnNetwork():
         self.topo_n2i=topo_n2i
         self.adj_set=adj_set
 
-    def generate_intervention_graph(self,node_idx,node_cat):
+    def do(self,node_ids,node_cats):
+        '''
+        Perform size(node_ids)-order internveiton on the graph.
+        node_ids    : list of node indexes where to perform internvetions
+        node_cats   : the category which we have to intervene at those nodes.
+        '''
+        #Copying the model first of all (new intervened dist will be this)
+        do_graph=self.base_graph.copy()
+
+        #Now one by one we will perform all the necessary intervnetions
+        for node_id,node_cat in zip(node_ids,node_cats):
+            self._single_do(do_graph,node_id,node_cat)
+
+        return do_graph
+
+    def _single_do(self,do_graph,node_idx,node_cat):
         '''
         This function will generate the intervention graph at the given
-        node number and category according to topological order.
+        node number and category according to topological order. This is limited
+        to perfoming a single do to the graph.
 
         node_cat is zero indexed
         '''
@@ -69,8 +88,6 @@ class BnNetwork():
         node=self.topo_i2n[node_idx]
         assert node_cat<self.card_node[node],"category index out of bound!!"
 
-        #Copying the model first of all
-        do_graph=self.base_graph.copy()
         #Now saving the cpds of the children of current node
         child_old_cpds=[do_graph.get_cpds(child).copy() for child in self.adj_set[node]]
         # pdb.set_trace()
@@ -99,13 +116,13 @@ class BnNetwork():
 
         #Finally testing the model
         do_graph.check_model()
-        return do_graph
 
 if __name__=="__main__":
     #Testing the base model and intervention
-    modelpath="dataset/alarm.bif"
+    modelpath="dataset/asia.bif"
     network=BnNetwork(modelpath)
 
     #Testing internvention
-    do_graph=network.generate_intervention_graph(15,1)
     # pdb.set_trace()
+    do_graph=network.do([2,3,7],[1,0,1])
+    pdb.set_trace()
