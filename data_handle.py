@@ -112,7 +112,7 @@ class BnNetwork():
         #Set the probability of intervented category to 1
         node_cpd=TabularCPD(node,
                             self.card_node[node],
-                            np.zeros((1,self.card_node[node])))
+                            np.zeros((self.card_node[node],1)))
         node_cpd.values[node_cat]=1.0
         #Add this cpd to graph
         do_graph.add_cpds(node_cpd)
@@ -153,7 +153,7 @@ class BnNetwork():
                                     return_type="dataframe")
             all_samples.append(samples)
 
-        # pdb.set_trace()
+        pdb.set_trace()
         #Now we will merge all the samples in one and shuffle it
         all_samples=pd.concat(all_samples)
         all_samples=all_samples.sample(frac=1.0).reset_index(drop=True)
@@ -170,12 +170,61 @@ class BnNetwork():
         '''
         This function will calcuate the probability of a sample in a graph,
         which will be later used to calcuate the overall mixture probability.
+
+        graph   : the graph on which we have to calculate the sample probability
+        sample  : the sample array in form of dictionary or numpy recarray
+
+        Since we cant vectorize this function, cuz every sample will generate,
+        a separate distribution and in that distribution we have to calculate
+        the probability. We will see later how to vectorize
         '''
-        raise NotImplementedError
+        def _get_columns_index(nodes_idx,nodes_card):
+            '''
+            This will convert the index to row major number for column of cpd to
+            access.
+            '''
+            assert len(nodes_idx)==len(nodes_card)
+            multiplier=nodes_card.copy()
+            multiplier[-1]=1  #we dont have to offset last index
+            for tidx in range(len(nodes_card)-2,-1,-1):
+                multiplier[tidx]=nodes_card[tidx+1]*multiplier[tidx+1]
+            #Now we are ready with the offset multiplier
+            ridx=0
+            for tidx in range(len(nodes_idx)):
+                assert nodes_idx[tidx]<nodes_card[tidx]
+                ridx+=nodes_idx[tidx]*multiplier[tidx]
+            return ridx
+
+        #Now we will start in the topological order to get prob
+        overall_prob=1.0
+        for nidx in range(len(self.topo_i2n)):
+            #Getting the information of node
+            node=self.topo_i2n[nidx]
+            node_cpd=graph.get_cpds(node)
+            #Getting the row in which to look
+            row_idx=node_val=sample[node]
+
+            #Now we have to get the columns number
+            pnodes=(node_cpd.variables.copy()).remove(node_cpd.variable)
+            col_idx=None
+            if len(pnode)!=0:
+                pnodes_card=[self.card_node[pn] for pn in pnodes]
+                pnode_vals=[sample[pn] for pn in pnodes]
+                col_idx=_get_columns_index(pnode_vals,pnode_card)
+            else:
+                col_idx=0
+            #Just to be safe we will reorder for now (Comment later for performance)
+            node_cpd.reorder_parents(parents)
+
+            #Now we will calculate the probabilityof the node given its parents
+            prob_node_given_parents=node_cpd.get_values()[row_idx,col_idx]
+            #Updating the overall probability
+            overall_prob=overall_prob*prob_node_given_parents
+        return overall_prob
 
 if __name__=="__main__":
     #Testing the base model and intervention
-    graph_name="alarm"
+    graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     network=BnNetwork(modelpath)
 
@@ -184,11 +233,11 @@ if __name__=="__main__":
     # pdb.set_trace()
 
     #Testing the sampler for mixture
-    sample_size=1000
+    sample_size=20
     savepath="dataset/{}/".format(graph_name)
     do_config=[
                 [[2,3],[1,0],0.5],
-                [[3,5,10,20],[0,1,0,1],0.3]
+                [[1,6],[0,1],0.3]
             ]
     samples=network.generate_sample_from_mixture(do_config,sample_size,savepath)
     # pdb.set_trace()
