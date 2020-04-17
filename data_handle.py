@@ -1,10 +1,13 @@
 import pdb
 import numpy as np
+np.random.seed(14)
+import pandas as pd
 from toposort import toposort_flatten
 from collections import defaultdict
 
 from pgmpy.readwrite import BIFReader
 from pgmpy.factors.discrete import TabularCPD
+from pgmpy.sampling import BayesianModelSampling
 
 class BnNetwork():
     '''
@@ -60,6 +63,7 @@ class BnNetwork():
         self.topo_n2i=topo_n2i
         self.adj_set=adj_set
 
+    #Generating the intervention Graph
     def do(self,node_ids,node_cats):
         '''
         Perform size(node_ids)-order internveiton on the graph.
@@ -83,7 +87,7 @@ class BnNetwork():
 
         node_cat is zero indexed
         '''
-        print("Creating intervention Graph")
+        # print("Creating intervention Graph")
         #Getting the name of node
         node=self.topo_i2n[node_idx]
         assert node_cat<self.card_node[node],"category index out of bound!!"
@@ -117,12 +121,74 @@ class BnNetwork():
         #Finally testing the model
         do_graph.check_model()
 
+    #Sampling functions
+    def generate_sample_from_mixture(self,do_config,sample_size,savepath=None):
+        '''
+        Generating the sample for the mixture distribution given by do_config.
+        do_config   : list of [ [node_ids,node_cats,pi], ... ]
+
+        node_ids could represent multiple interventions
+        '''
+        all_samples=[]
+        #Now we will sample from the base distribution
+        _,_,pis=zip(*do_config)
+        phi=1-sum(pis)
+        assert phi>=0,"Illegal mixture Distribtuion"
+        sampler=BayesianModelSampling(self.base_graph)
+        samples=sampler.forward_sample(size=int(sample_size*phi),
+                                        return_type="dataframe")
+        all_samples.append(samples)
+        # pdb.set_trace()
+
+        #One by one we will generate the mixture graph and corresponding sample
+        for node_ids,node_cats,pi in do_config:
+            #Getting the intervention distributions
+            do_graph=self.do(node_ids,node_cats)
+
+            #Now we are ready to sample from our distribution
+            sampler=BayesianModelSampling(do_graph)
+            #Only sample the amount required
+            num_sample=int(sample_size*pi)
+            samples=sampler.forward_sample(size=num_sample,
+                                    return_type="dataframe")
+            all_samples.append(samples)
+
+        # pdb.set_trace()
+        #Now we will merge all the samples in one and shuffle it
+        all_samples=pd.concat(all_samples)
+        all_samples=all_samples.sample(frac=1.0).reset_index(drop=True)
+
+        #Saving the dataframe (for reproducabilty)
+        if savepath!=None:
+            filepath="{}mixture_{}_{}.csv".format(savepath,num_sample,str(do_config))
+            all_samples.to_csv(filepath,index=False)
+
+        return all_samples
+
+    #Probability of a sample (for loss function)
+    def _get_graph_sample_probability(self,graph,sample):
+        '''
+        This function will calcuate the probability of a sample in a graph,
+        which will be later used to calcuate the overall mixture probability.
+        '''
+        raise NotImplementedError
+
 if __name__=="__main__":
     #Testing the base model and intervention
-    modelpath="dataset/asia.bif"
+    graph_name="alarm"
+    modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     network=BnNetwork(modelpath)
 
     #Testing internvention
-    # pdb.set_trace()
     do_graph=network.do([2,3,7],[1,0,1])
-    pdb.set_trace()
+    # pdb.set_trace()
+
+    #Testing the sampler for mixture
+    sample_size=1000
+    savepath="dataset/{}/".format(graph_name)
+    do_config=[
+                [[2,3],[1,0],0.5],
+                [[3,5,10,20],[0,1,0,1],0.3]
+            ]
+    samples=network.generate_sample_from_mixture(do_config,sample_size,savepath)
+    # pdb.set_trace()
