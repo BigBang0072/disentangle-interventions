@@ -153,7 +153,7 @@ class BnNetwork():
                                     return_type="dataframe")
             all_samples.append(samples)
 
-        pdb.set_trace()
+        # pdb.set_trace()
         #Now we will merge all the samples in one and shuffle it
         all_samples=pd.concat(all_samples)
         all_samples=all_samples.sample(frac=1.0).reset_index(drop=True)
@@ -205,16 +205,17 @@ class BnNetwork():
             row_idx=node_val=sample[node]
 
             #Now we have to get the columns number
-            pnodes=(node_cpd.variables.copy()).remove(node_cpd.variable)
+            pnodes=(node_cpd.variables.copy())
+            pnodes.remove(node_cpd.variable)
             col_idx=None
-            if len(pnode)!=0:
+            if len(pnodes)!=0:
                 pnodes_card=[self.card_node[pn] for pn in pnodes]
-                pnode_vals=[sample[pn] for pn in pnodes]
-                col_idx=_get_columns_index(pnode_vals,pnode_card)
+                pnodes_vals=[sample[pn] for pn in pnodes]
+                col_idx=_get_columns_index(pnodes_vals,pnodes_card)
+                #Just to be safe we will reorder for now (Comment later for performance)
+                node_cpd.reorder_parents(pnodes)
             else:
                 col_idx=0
-            #Just to be safe we will reorder for now (Comment later for performance)
-            node_cpd.reorder_parents(parents)
 
             #Now we will calculate the probabilityof the node given its parents
             prob_node_given_parents=node_cpd.get_values()[row_idx,col_idx]
@@ -241,3 +242,7 @@ if __name__=="__main__":
             ]
     samples=network.generate_sample_from_mixture(do_config,sample_size,savepath)
     # pdb.set_trace()
+
+    #Testing the probability calculation function
+    prob=network._get_graph_sample_probability(network.base_graph,samples.iloc[0])
+    pdb.set_trace()
