@@ -166,6 +166,43 @@ class BnNetwork():
         return all_samples
 
     #Probability of a sample (for loss function)
+    def get_sample_probability(self,interv_locs,input_samples):
+        '''
+        Given a set of sample, this function will calculate the overall sample,
+        probability and then reaturn it back to tensorflow for likliehood
+        calculation nad backprop.
+
+        We return the sample probability for each of the intervention component
+        not bother about summing up the overall probability which will be done
+        inside the decoder or full model.
+
+        Output shape: [num_sample,num_intervention_loc(=sparsity)]
+        '''
+        #First of all generating all the required intervention graph
+        interv_graphs=[]
+        for loc in interv_locs:
+            node_ids,cat_ids=loc
+            interv_graphs.append(self.do(node,cat))
+
+        #Now we are ready to get sample prob for each interventions
+        input_samples=input_samples.numpy()
+        raise NotImplementedError   #TODO
+        #Write a function to reconvert the input samples from one hot to actual
+        input_samples=self.reconvert(input_samples)
+
+        #For each sample, generate the graph and calculate the probability
+        all_sample_prob=[]
+        for idx in range(input_samples.shape[0]):
+            sample=input_samples[idx,:]
+            sample_prob=[]
+            for graph in interv_graphs:
+                prob=self._get_graph_sample_probability(graph,sample)
+                sample_prob.append(prob)
+            all_sample_prob.append(sample_prob)
+        #Now converting this to a numpy array
+        all_sample_prob=np.array(all_sample_prob)
+        return all_sample_prob
+
     def _get_graph_sample_probability(self,graph,sample):
         '''
         This function will calcuate the probability of a sample in a graph,
@@ -244,5 +281,6 @@ if __name__=="__main__":
     # pdb.set_trace()
 
     #Testing the probability calculation function
-    prob=network._get_graph_sample_probability(network.base_graph,samples.iloc[0])
+    prob=network._get_graph_sample_probability(network.base_graph,
+                                                samples.iloc[0])
     pdb.set_trace()
