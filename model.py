@@ -2,6 +2,8 @@ import tensorflow as tf
 from tensorflow import keras
 tf.random.set_seed(211)
 
+from data_handling import BnNetwork
+
 def Encoder(keras.layers.Layer):
     '''
     This class will encode the given sample to the mixing coefficient space.
@@ -86,24 +88,30 @@ def Decoder(keras.layers.Layer):
         #First of all we have to stack all the output into one single tensor
         concat_output=tf.concat(coef_output_avg,axis=0)
         #Now we will retreive the tok-k position of interventions
-        value,indices=tf.math.top_k(concat_output,k=self.sparsity_factor)
+        interv_loc_prob,indices=tf.math.top_k(concat_output,
+                                                k=self.sparsity_factor)
 
         #Now once we have indices we reconvert them to locations of interv
         interv_locs=self._get_intervention_locations(indices)
 
         #Now we are ready to calculate the likliehood of different samples
-        #TODO: Assuming that we are generating actual probability here
         sample_loc_prob=oracle.get_sample_probability(interv_loc,
                                                     input_samples)
 
         #This is temporary #TODO
-        interv_loc_prob=value
-        return interv_loc_prob,sample_loc_prob
+        #TODO: Assuming that we are generating actual probability here
+        interv_loc_prob=interv_loc_prob
+
+        #Now getting the log probability of seeing the samples
+        samples_logprob=self._calculate_sample_likliehood(interv_loc_prob,
+                                                        sample_loc_prob)
+
+        return samples_logprob
 
     def _get_intervention_locations(self,indices):
         '''
         Given a list of indices of 1-D tensor get the location of intervention
-        node and categories. This is only valid for
+        node and categories. This is only valid for first order interventions
         '''
         #Converting the indices to location
         indices=indices.numpy()
@@ -115,3 +123,42 @@ def Decoder(keras.layers.Layer):
         #Now we are ready to convert 1-D indices to intervention location
         interv_locs=[lookup_table[idx] for idx in indices]
         return interv_locs
+
+    def _calculate_sample_likliehood(self,interv_loc_prob,sample_loc_prob):
+        '''
+        Given the probability of the interventions and the probability of
+        samples in those interventions, this function will calulcate the
+        overall log-liklihood of the samples.
+
+        Assumption:
+        The interv_loc_distiribution is a valid distribution, i.e sum of
+        probability of all the intervnetion done is equal to 1
+        '''
+        #Getting the overall sample probability of mixture
+        sample_prob=tf.reduce_sum(interv_loc_prob*sample_loc_prob,axis=1)
+
+        #Now we will calculate the overall log likliehood
+        sample_logprob=tf.math.log(sample_prob)
+        all_sample_logprob=tf.reduce_mean(sample_logprob)
+
+        #Adding this to the layers losses
+        return all_sample_logprob
+
+def AutoEncoder(keras.layers.Layer):
+    '''
+    This class will merge both the Encoder and Decoder inside it and calculate
+    overall loss.
+    '''
+    def __init__(self,dense_config,coef_config,oracle,sparsity_factor):
+        super(AutoEncoder,self).__init__()
+        #Now we will initialize our Encoder and Decoder
+        self.encoder=Encoder(dense_config,coef_config)
+        self.decoder=Decoder(sparsity_factor,coef_config,oracle)
+
+    def call(self,input):
+        #First of all calling the encoder to map us to latent space
+        coef_output_avg=self.encoder(input)
+        #Now we will get the likliehood of the samples (kept tack internally)
+        samples_logprob=self.decoder(coef_output_avg,input)
+
+        return samples_logprob
