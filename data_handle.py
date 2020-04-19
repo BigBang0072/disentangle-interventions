@@ -23,6 +23,11 @@ class BnNetwork():
     topo_i2n=None           #The topological ordering (index to node dict)
     topo_n2i=None           #node to index in topological ordering
 
+    #Variables for one-hot encoding of samples
+    vector_length=None      #Length of one-hot vector
+    one2loc=None            #Mapping from one-hot index to actual node and cat
+    loc2one=None            #Mapping from node,cat to location in one hot
+    data_schema=None        #Empty dataframe to hold the reconverted people
 
     def __init__(self,modelpath):
         #Reading the model from the file
@@ -30,6 +35,8 @@ class BnNetwork():
         #Initializing the base graph
         print("Initializing the base_graph")
         self._initialize_base_graph(reader)
+        #Initializing the one hot variables
+        self._get_one_hot_mapping()
 
     def _initialize_base_graph(self,reader):
         '''
@@ -122,7 +129,8 @@ class BnNetwork():
         do_graph.check_model()
 
     #Sampling functions
-    def generate_sample_from_mixture(self,do_config,sample_size,savepath=None):
+    def generate_sample_from_mixture(self,do_config,sample_size,
+                                    savepath=None):
         '''
         Generating the sample for the mixture distribution given by do_config.
         do_config   : list of [ [node_ids,node_cats,pi], ... ]
@@ -158,12 +166,80 @@ class BnNetwork():
         all_samples=pd.concat(all_samples)
         all_samples=all_samples.sample(frac=1.0).reset_index(drop=True)
 
+        #We will save the schema for the later reconversions
+        self.data_schema=pd.DataFrame(columns=all_samples.columns)
+
         #Saving the dataframe (for reproducabilty)
         if savepath!=None:
             filepath="{}mixture_{}_{}.csv".format(savepath,num_sample,str(do_config))
             all_samples.to_csv(filepath,index=False)
 
         return all_samples
+
+    def encode_sample_one_hot(self,samples_df):
+        '''
+        This function will take tha sample dataframe and encode them in one
+        hot way, merging all nodes into a single vector.
+        '''
+        #Now we will create the input one by one for each sample
+        samples_one_hot=[]
+        for sidx in range(samples_df.shape[0]):
+            #Getting the sample and empyty vector
+            sample=samples_df.iloc[sidx]
+            vector=np.zeros((1,self.vector_length),dtype=np.float32)
+            for nidx in range(len(self.topo_i2n)):
+                node=self.topo_i2n[nidx]
+                cat=sample[node]
+                #Assigning the location to be hot
+                vec_pos=self.loc2one[(node,cat)]
+                vector[0,vec_pos]=1
+            #Adding the one hot vector to list
+            samples_one_hot.append(vector)
+        #Now we will convert them to one array
+        samples_one_hot=np.concatenate(samples_one_hot,axis=0)
+        return samples_one_hot
+
+    def decode_sample_one_hot(self,samples_one_hot):
+        '''
+        This function will reconvert the samples to a dataframe as before,
+        just like papaji didnt get to know what mishap has happened.
+        '''
+        #Getting the empty dataframe
+        df=self.data_schema.copy()
+        #Now we are ready to reconvert peeps
+        for sidx in range(samples_one_hot.shape[0]):
+            sample=samples_one_hot[sidx,:]
+            assert sample.shape[0]==self.vector_length
+
+            for tidx in range(self.vector_length):
+                val=sample[tidx]
+                if val==0:
+                    continue
+                else:
+                    node,cat=self.one2loc[tidx]
+                    df.iloc[sidx][node]=cat
+        return df
+
+    def _get_one_hot_mapping(self):
+        '''
+        Generate the location map from category number to one hot and
+        vice-versa.
+        '''
+        vector_length=0
+        one2loc={}
+        loc2one={}
+        for nidx in range(len(self.topo_i2n)):
+            node=self.topo_i2n[nidx]
+            card=self.card_node[node]
+            #Now we will hash the nodes
+            for cidx in range(card):
+                loc2one[(node,cidx)]=vector_length
+                one2loc[vector_length]=[(node,cidx)]
+                vector_length+=1
+
+        self.vector_length=vector_length
+        self.one2loc=one2loc
+        self.loc2one=loc2one
 
     #Probability of a sample (for loss function)
     def get_sample_probability(self,interv_locs,input_samples):
@@ -182,18 +258,20 @@ class BnNetwork():
         interv_graphs=[]
         for loc in interv_locs:
             node_ids,cat_ids=loc
-            interv_graphs.append(self.do(node,cat))
+            if node_ids==len(self.topo_i2n):
+                interv_graphs.append(self.base_graph)
+            else:
+                interv_graphs.append(self.do(node,cat))
 
         #Now we are ready to get sample prob for each interventions
         input_samples=input_samples.numpy()
-        raise NotImplementedError   #TODO
-        #Write a function to reconvert the input samples from one hot to actual
-        input_samples=self.reconvert(input_samples)
+        #reconvert the input samples from one hot to actual
+        input_samples=self.decode_sample_one_hot(input_samples)
 
         #For each sample, generate the graph and calculate the probability
         all_sample_prob=[]
         for idx in range(input_samples.shape[0]):
-            sample=input_samples[idx,:]
+            sample=input_samples.iloc[idx]
             sample_prob=[]
             for graph in interv_graphs:
                 prob=self._get_graph_sample_probability(graph,sample)
@@ -277,7 +355,8 @@ if __name__=="__main__":
                 [[2,3],[1,0],0.5],
                 [[1,6],[0,1],0.3]
             ]
-    samples=network.generate_sample_from_mixture(do_config,sample_size,savepath)
+    samples=network.generate_sample_from_mixture(do_config,sample_size,
+                                                    savepath)
     # pdb.set_trace()
 
     #Testing the probability calculation function
