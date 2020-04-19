@@ -1,6 +1,6 @@
 import pdb
 import numpy as np
-np.random.seed(14)
+# np.random.seed(14)
 import pandas as pd
 from toposort import toposort_flatten
 from collections import defaultdict
@@ -197,6 +197,7 @@ class BnNetwork():
             samples_one_hot.append(vector)
         #Now we will convert them to one array
         samples_one_hot=np.concatenate(samples_one_hot,axis=0)
+        # pdb.set_trace()
         return samples_one_hot
 
     def decode_sample_one_hot(self,samples_one_hot):
@@ -207,17 +208,27 @@ class BnNetwork():
         #Getting the empty dataframe
         df=self.data_schema.copy()
         #Now we are ready to reconvert peeps
+        all_row_entry=[]
         for sidx in range(samples_one_hot.shape[0]):
             sample=samples_one_hot[sidx,:]
             assert sample.shape[0]==self.vector_length
 
+            #Now we will decode this example
+            row_entry={}
             for tidx in range(self.vector_length):
                 val=sample[tidx]
                 if val==0:
                     continue
                 else:
                     node,cat=self.one2loc[tidx]
-                    df.iloc[sidx][node]=cat
+                    row_entry[node]=cat
+
+            #Adding new row to the dataframe
+            # pdb.set_trace()
+            all_row_entry.append(pd.DataFrame(row_entry,index=[0]))
+
+        #Concatenating all the rows into one big dataframe
+        df=pd.concat(all_row_entry,ignore_index=True)
         return df
 
     def _get_one_hot_mapping(self):
@@ -234,7 +245,7 @@ class BnNetwork():
             #Now we will hash the nodes
             for cidx in range(card):
                 loc2one[(node,cidx)]=vector_length
-                one2loc[vector_length]=[(node,cidx)]
+                one2loc[vector_length]=(node,cidx)
                 vector_length+=1
 
         self.vector_length=vector_length
@@ -349,7 +360,7 @@ if __name__=="__main__":
     # pdb.set_trace()
 
     #Testing the sampler for mixture
-    sample_size=20
+    sample_size=10
     savepath="dataset/{}/".format(graph_name)
     do_config=[
                 [[2,3],[1,0],0.5],
@@ -362,4 +373,11 @@ if __name__=="__main__":
     #Testing the probability calculation function
     prob=network._get_graph_sample_probability(network.base_graph,
                                                 samples.iloc[0])
-    pdb.set_trace()
+    # pdb.set_trace()
+
+    #Testing the encoding and decoding function
+    sample_one_hot=network.encode_sample_one_hot(samples)
+    sample_prime=network.decode_sample_one_hot(sample_one_hot)
+    sample_prime=sample_prime[samples.columns]
+    assert samples.equals(sample_prime),"Encoded and Decoded data not same"
+    # pdb.set_trace()
