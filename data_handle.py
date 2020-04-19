@@ -269,10 +269,12 @@ class BnNetwork():
         interv_graphs=[]
         for loc in interv_locs:
             node_ids,cat_ids=loc
-            if node_ids==len(self.topo_i2n):
+            #TODO: Right now we will deal with single inerventions
+            assert len(node_ids)==1,"Multiple simultaneous intervention"
+            if node_ids[0]==len(self.topo_i2n):
                 interv_graphs.append(self.base_graph)
             else:
-                interv_graphs.append(self.do(node,cat))
+                interv_graphs.append(self.do(node_ids,cat_ids))
 
         #Now we are ready to get sample prob for each interventions
         input_samples=input_samples.numpy()

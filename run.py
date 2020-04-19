@@ -1,9 +1,10 @@
 import tensorflow as tf
 from tensorflow import keras
+import numpy as np
 tf.random.set_seed(211)
 np.random.seed(211)
 
-from data_handling import BnNetwork
+from data_handle import BnNetwork
 from model import AutoEncoder
 
 def get_coef_config(oracle):
@@ -35,23 +36,25 @@ def trainer(trainer_config):
                                                 trainer_config["savepath"])
     #Preparing the dataset as one-hot encoding
     dataset=oracle.encode_sample_one_hot(dataset)
+    print("Dataset created with shape:",dataset.shape)
     #Now we will convert this numpy array into tensorflow dataset
-    dataset=tf.data.Dataset.from_tensor_slice(dataset).astype("tf.float32")
+    dataset=tf.data.Dataset.from_tensor_slices(dataset)
+    dataset=dataset.repeat(trainer_config["epochs"])
     dataset=dataset.shuffle(trainer_config["shuffle_buffer"])
     dataset=dataset.batch(trainer_config["batch_size"])
 
 
     #Now we create the model
     trainer_config["coef_config"]=get_coef_config(oracle)
-    model=AutoEncoder(trainer_config["dense_config"],
-                        trainer_config["coef_config"],
-                        oracle,
-                        trainer_config["sparsity_factor"])
+    model=AutoEncoder(dense_config=trainer_config["dense_config"],
+                        coef_config=trainer_config["coef_config"],
+                        sparsity_factor=trainer_config["sparsity_factor"],
+                        oracle=oracle)
     #Creating our optimizer
     optimizer=tf.keras.optimizers.Adam(trainer_config["learning_rate"])
 
     #Now we are ready to run our training loop
-    def run_training_step(X,model,optimizer):
+    def run_training_step(X,model,oracle,optimizer):
         '''
         This function will run a single step of gradient update.
         '''
@@ -59,7 +62,7 @@ def trainer(trainer_config):
             #Getting the sample lop porbability
             samples_logprob=model(X)
             #Now we define our loss as negative log-likliehood
-            loss=sample_logprob*(-1)
+            loss=samples_logprob*(-1)
 
         #Calculating the gradient
         grads=tape.gradient(loss,model.trainable_weights)
@@ -69,17 +72,18 @@ def trainer(trainer_config):
 
     #Starting to enumerate over the dataset
     losses=[]
+    print("Starting the training steps:")
     for step,X in enumerate(dataset):
-        loss=run_training_step(X,model,optimizer)
+        loss=run_training_step(X,model,oracle,optimizer)
         losses.append(float(loss))
 
         #Printing ocassionally
         if step%trainer_config["verbose"]==0:
-            print("step:{} loss:{}".format(step,loss))
+            print("step:{0:} loss:{1:0.5f}".format(step,loss))
 
         #Stop after certain number of epochs
-        if step>=trainer_config["epochs"]:
-            break
+        # if step>=trainer_config["epochs"]:
+        #     break
     return losses
 
 if __name__=="__main__":
@@ -110,4 +114,7 @@ if __name__=="__main__":
     trainer_config["learning_rate"]=1e-3
 
     trainer_config["verbose"]=5
-    trainer_config["epochs"]=30
+    trainer_config["epochs"]=10
+
+    #Calling the trainer
+    trainer(trainer_config)
