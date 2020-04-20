@@ -141,10 +141,11 @@ class BnNetwork():
         _,_,pis=zip(*do_config)
         phi=1-sum(pis)
         assert phi>=0,"Illegal mixture Distribtuion"
-        sampler=BayesianModelSampling(self.base_graph)
-        samples=sampler.forward_sample(size=int(sample_size*phi),
-                                        return_type="dataframe")
-        all_samples.append(samples)
+        if int(sample_size*phi)>0:
+            sampler=BayesianModelSampling(self.base_graph)
+            samples=sampler.forward_sample(size=int(sample_size*phi),
+                                            return_type="dataframe")
+            all_samples.append(samples)
         # pdb.set_trace()
 
         #One by one we will generate the mixture graph and corresponding sample

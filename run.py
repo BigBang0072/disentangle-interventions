@@ -104,7 +104,8 @@ if __name__=="__main__":
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
                 [[2,],[0],0.3],
-                [[6,],[1],0.3],#Making 0.5 gives a and p error see
+                [[6,],[1],0.3],
+                [[7,],[0],0.4]
             ]
 
     #Deciding the configuration of the encoder
