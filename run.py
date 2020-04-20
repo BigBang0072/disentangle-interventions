@@ -53,7 +53,8 @@ def trainer(trainer_config):
                         oracle=oracle,
                         do_config=trainer_config["do_config"])
     #Creating our optimizer
-    optimizer=tf.keras.optimizers.Adam(trainer_config["learning_rate"])
+    optimizer=tf.keras.optimizers.Adam(trainer_config["learning_rate"],
+                                    decay=trainer_config["decay_rate"])
 
     #Now we are ready to run our training loop
     def run_training_step(X,model,oracle,optimizer):
@@ -102,7 +103,7 @@ if __name__=="__main__":
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
-                [[2,],[0],0.5],
+                [[2,],[0],0.3],
                 [[6,],[1],0.3],#Making 0.5 gives a and p error see
             ]
 
@@ -122,8 +123,9 @@ if __name__=="__main__":
     trainer_config["shuffle_buffer"]=500
     trainer_config["batch_size"]=100
     trainer_config["dense_config"]=dense_config
-    trainer_config["sparsity_factor"]=10
+    trainer_config["sparsity_factor"]=16
     trainer_config["learning_rate"]=1e-3
+    trainer_config["decay_rate"]=1e-4
 
     trainer_config["verbose"]=5
     trainer_config["epochs"]=10
