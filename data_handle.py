@@ -129,8 +129,7 @@ class BnNetwork():
         do_graph.check_model()
 
     #Sampling functions
-    def generate_sample_from_mixture(self,do_config,sample_size,
-                                    savepath=None):
+    def generate_sample_from_mixture(self,do_config,sample_size,savepath=None):
         '''
         Generating the sample for the mixture distribution given by do_config.
         do_config   : list of [ [node_ids,node_cats,pi], ... ]
@@ -171,7 +170,8 @@ class BnNetwork():
 
         #Saving the dataframe (for reproducabilty)
         if savepath!=None:
-            filepath="{}mixture_{}_{}.csv".format(savepath,num_sample,str(do_config))
+            filepath="{}mixture_{}_{}.csv".format(savepath,num_sample,
+                                                str(do_config))
             all_samples.to_csv(filepath,index=False)
 
         return all_samples

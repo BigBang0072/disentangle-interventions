@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 import numpy as np
+import pdb
 tf.random.set_seed(211)
 np.random.seed(211)
 
@@ -49,7 +50,8 @@ def trainer(trainer_config):
     model=AutoEncoder(dense_config=trainer_config["dense_config"],
                         coef_config=trainer_config["coef_config"],
                         sparsity_factor=trainer_config["sparsity_factor"],
-                        oracle=oracle)
+                        oracle=oracle,
+                        do_config=trainer_config["do_config"])
     #Creating our optimizer
     optimizer=tf.keras.optimizers.Adam(trainer_config["learning_rate"])
 
@@ -72,14 +74,22 @@ def trainer(trainer_config):
 
     #Starting to enumerate over the dataset
     losses=[]
+    doRecalls=[]
     print("Starting the training steps:")
     for step,X in enumerate(dataset):
+        #Running the training one step
         loss=run_training_step(X,model,oracle,optimizer)
         losses.append(float(loss))
 
+        #Getting the metrics from the model
+        doRecall=float(model.metrics[0].result())
+        doRecalls.append(doRecall)
+        # pdb.set_trace()
+
         #Printing ocassionally
         if step%trainer_config["verbose"]==0:
-            print("step:{0:} loss:{1:0.5f}".format(step,loss))
+            print("step:{0:} loss:{1:0.5f} doRecall:{2:0.5f}".format(
+                                                        step,loss,doRecall))
 
         #Stop after certain number of epochs
         # if step>=trainer_config["epochs"]:
@@ -92,6 +102,7 @@ if __name__=="__main__":
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
                 [[2,],[0],0.5],
+                [[6,],[1],0.3],
             ]
 
     #Deciding the configuration of the encoder

@@ -68,10 +68,11 @@ class Decoder(keras.layers.Layer):
     Here we will have control over sparsity, choosing the top probable
     interventions in mixture and then calculating likliehood.
     '''
-    def __init__(self,sparsity_factor,coef_config,oracle,**kwargs):
+    def __init__(self,sparsity_factor,coef_config,oracle,do_config,**kwargs):
         super(Decoder,self).__init__(**kwargs)
         #Initilaizing the oracle which is handling all PGM based work
         self.oracle=oracle
+        self.do_config=do_config
         #Parameters to choose the top-k interventions out of all
         self.sparsity_factor=sparsity_factor
         #Variable holding the number of category in each node (for unconcat)
@@ -105,6 +106,9 @@ class Decoder(keras.layers.Layer):
         #Now getting the log probability of seeing the samples
         samples_logprob=self._calculate_sample_likliehood(interv_loc_prob,
                                                         sample_loc_prob)
+        #Calculating the metrics to track progress
+        doRecall=self._calculate_doRecall(interv_locs,self.do_config)
+        self.add_metric(doRecall,name="doRecall",aggregation="mean")
 
         return samples_logprob
 
@@ -144,16 +148,40 @@ class Decoder(keras.layers.Layer):
         #Adding this to the layers losses
         return all_sample_logprob
 
+    def _calculate_doRecall(self,interv_locs,do_config):
+        '''
+        This function will calculate the recall of the intervention done
+        actually and then present in the top-Sparsity candidates.
+        '''
+        total_count=len(do_config)*1.0
+        presence_count=0.0
+        for do in do_config:
+            nodes,cats,_=do
+            if (nodes,cats) in interv_locs:
+                presence_count+=1
+        #Now we will also have to track the no intervention case
+        _,_,pis=zip(*do_config)
+        phi=1-sum(pis)
+        no_interv_idx=len(self.coef_config)-1
+        if phi>0:
+            total_count+=1
+            if ([no_interv_idx],[0]) in interv_locs:
+                presence_count+=1
+        #Now we are ready to calculate the recall
+        recall=presence_count/total_count
+        return recall
+
 class AutoEncoder(keras.Model):
     '''
     This class will merge both the Encoder and Decoder inside it and calculate
     overall loss.
     '''
-    def __init__(self,dense_config,coef_config,sparsity_factor,oracle,**kwargs):
+    def __init__(self,dense_config,coef_config,sparsity_factor,
+                    oracle,do_config,**kwargs):
         super(AutoEncoder,self).__init__(**kwargs)
         #Now we will initialize our Encoder and Decoder
         self.encoder=Encoder(dense_config,coef_config)
-        self.decoder=Decoder(sparsity_factor,coef_config,oracle)
+        self.decoder=Decoder(sparsity_factor,coef_config,oracle,do_config)
 
     def call(self,inputs):
         #First of all calling the encoder to map us to latent space
