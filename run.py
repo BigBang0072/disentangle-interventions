@@ -84,11 +84,12 @@ def trainer(trainer_config):
         #Getting the metrics from the model
         doRecall=float(model.metrics[0].result())
         doRecalls.append(doRecall)
+        model.reset_metrics()
         # pdb.set_trace()
 
         #Printing ocassionally
         if step%trainer_config["verbose"]==0:
-            print("step:{0:} loss:{1:0.5f} doRecall:{2:0.5f}".format(
+            print("step:{0:} loss:{1:0.5f} doRecall:{2:0.5f}\n\n".format(
                                                         step,loss,doRecall))
 
         #Stop after certain number of epochs
@@ -102,7 +103,7 @@ if __name__=="__main__":
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
                 [[2,],[0],0.5],
-                [[6,],[1],0.3],
+                [[6,],[1],0.3],#Making 0.5 gives a and p error see
             ]
 
     #Deciding the configuration of the encoder
@@ -121,7 +122,7 @@ if __name__=="__main__":
     trainer_config["shuffle_buffer"]=500
     trainer_config["batch_size"]=100
     trainer_config["dense_config"]=dense_config
-    trainer_config["sparsity_factor"]=5
+    trainer_config["sparsity_factor"]=10
     trainer_config["learning_rate"]=1e-3
 
     trainer_config["verbose"]=5

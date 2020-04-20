@@ -1,6 +1,8 @@
 import tensorflow as tf
 from tensorflow import keras
 tf.random.set_seed(211)
+import pdb
+from pprint import pprint
 
 from data_handle import BnNetwork
 
@@ -110,6 +112,10 @@ class Decoder(keras.layers.Layer):
         doRecall=self._calculate_doRecall(interv_locs,self.do_config)
         self.add_metric(doRecall,name="doRecall",aggregation="mean")
 
+        print("inerv_locs:",interv_locs)
+        print("interv_loc_prob:",interv_loc_prob)
+        print("do_config:",self.do_config)
+
         return samples_logprob
 
     def _get_intervention_locations(self,indices):
@@ -169,6 +175,7 @@ class Decoder(keras.layers.Layer):
                 presence_count+=1
         #Now we are ready to calculate the recall
         recall=presence_count/total_count
+        # pdb.set_trace()
         return recall
 
 class AutoEncoder(keras.Model):
