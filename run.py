@@ -127,17 +127,17 @@ if __name__=="__main__":
     trainer_config["shuffle_buffer"]=500
     trainer_config["batch_size"]=100
     trainer_config["dense_config"]=dense_config
-    trainer_config["sparsity_factor"]=17
+    trainer_config["sparsity_factor"]=6
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
 
-    soften=True
+    soften=False
+    trainer_config["sample_strategy"]="top-k"
     init_temp=1000
     temp_decay_rate=0.5
     temp_decay_step=10          #sample_size/batch_size = num steps per epoch
     trainer_config["temp_config"]=[soften,init_temp,
                                     temp_decay_rate,temp_decay_step]
-    trainer_config["sample_strategy"]="gumbel"
 
     trainer_config["verbose"]=5
     trainer_config["epochs"]=25

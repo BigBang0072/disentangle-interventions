@@ -180,7 +180,8 @@ class Decoder(keras.layers.Layer):
         interv_locs=[lookup_table[idx] for idx in indices]
         return interv_locs
 
-    def _calculate_sample_likliehood(self,interv_loc_prob,sample_loc_prob):
+    def _calculate_sample_likliehood(self,interv_loc_prob,sample_loc_prob,
+                                    tolerance=1e-10):
         '''
         Given the probability of the interventions and the probability of
         samples in those interventions, this function will calulcate the
@@ -194,7 +195,7 @@ class Decoder(keras.layers.Layer):
         sample_prob=tf.reduce_sum(interv_loc_prob*sample_loc_prob,axis=1)
 
         #Now we will calculate the overall log likliehood
-        sample_logprob=tf.math.log(sample_prob)
+        sample_logprob=tf.math.log(sample_prob+tolerance)
         all_sample_logprob=tf.reduce_mean(sample_logprob)
 
         #Adding this to the layers losses
