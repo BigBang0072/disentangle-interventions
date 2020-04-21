@@ -10,7 +10,8 @@ class Encoder(keras.layers.Layer):
     '''
     This class will encode the given sample to the mixing coefficient space.
     '''
-    def __init__(self,dense_config,coef_config,**kwargs):
+    def __init__(self,dense_config,coef_config,
+                temp_config,global_step,,**kwargs):
         '''
         dense_config    : [[num_unit1,activation1],[num_unit2,activation2]...]
         coef_config     : the cardinality of each of the coefficient (pi^{..})
@@ -31,6 +32,18 @@ class Encoder(keras.layers.Layer):
             coef_layers.append(keras.layers.Dense(units,activation=None))
         self.coef_layers=coef_layers
 
+        #Initializing the temperature variable
+        self.soften,init_temp,temp_decay_rate,temp_decay_step=temp_config
+        if soften==True:
+            assert 0.0<=temp_decay_rate<=1,"Decay rate in wrong range!!"
+            #Now we have to decay this as the training goes on
+            self.temperature=init_temp*tf.math.pow(
+                                temp_decay_rate,global_step/temp_decay_step)
+            #Possible porblem is that this will not be updated as graph runs
+            self.temperature=tf.clip_by_value(self.temperature,
+                                            clip_value_min=1.0,
+                                            clip_value_max=init_value)
+
     def call(self,inputs):
         '''
         We could encode out input categories both as one-hot OR
@@ -48,7 +61,13 @@ class Encoder(keras.layers.Layer):
         normalization_const=0.0
         for coef_layer in self.coef_layers:
             #Applying the layer and exp to get unnormalized probability
-            coef_actv=tf.math.exp(coef_layer(X))
+            coef_actv=coef_layer(X)
+            #Using temperature to smoothen out the probabilities
+            if soften==True:
+                coef_actv=coef_actv/self.temperature
+
+            #Now we will expoentitate to convert to probability
+            coef_actv=tf.math.exp(coef_actv)#BEWARE: inf,use subtrac trick
             coef_activations.append(coef_actv)
 
             #Adding up the contribution to normalize later
@@ -60,7 +79,10 @@ class Encoder(keras.layers.Layer):
         coef_output_avg=[tf.reduce_mean(coef_prob,axis=0)
                                         for coef_prob in coef_output]
 
-        return coef_output_avg
+        #First of all we have to stack all the output into one single tensor
+        concat_output=tf.concat(coef_output_avg,axis=0)
+
+        return concat_output
 
 class Decoder(keras.layers.Layer):
     '''
@@ -70,7 +92,8 @@ class Decoder(keras.layers.Layer):
     Here we will have control over sparsity, choosing the top probable
     interventions in mixture and then calculating likliehood.
     '''
-    def __init__(self,sparsity_factor,coef_config,oracle,do_config,**kwargs):
+    def __init__(self,sparsity_factor,coef_config,oracle,do_config,
+                sample_strategy,**kwargs):
         super(Decoder,self).__init__(**kwargs)
         #Initilaizing the oracle which is handling all PGM based work
         self.oracle=oracle
@@ -81,18 +104,34 @@ class Decoder(keras.layers.Layer):
         self.coef_config=coef_config
         #TODO: to be changed later when we are doing multiple interventions
         assert coef_config[-1]==1,"Last pi should be for init-distirbution"
+        #Initializing the sampling strategy
+        self.sample_strategy=sample_strategy
+        assert sample_strategy in ["top-k","gumbel"],"Wrong sample strategy"
 
-    def call(self,inputs,coef_output_avg):
+    def call(self,inputs,concat_output):
         '''
         This function will select the top-|sparsity| number of node which says
         they are most probable for intervention to happen. Then use them to
         compute the likliehood.
         '''
-        #First of all we have to stack all the output into one single tensor
-        concat_output=tf.concat(coef_output_avg,axis=0)
-        #Now we will retreive the tok-k position of interventions
-        interv_loc_prob,indices=tf.math.top_k(concat_output,
+        if self.sample_strategy=="top-k":
+            #Now we will retreive the tok-k position of interventions
+            interv_loc_prob,indices=tf.math.top_k(concat_output,
                                                 k=self.sparsity_factor)
+        elif self.sample_strategy=="gumbel":
+            #Here we will sample the indices instead of top-k directly
+            total_dims=sum(self.coef_config)
+            gumbel_samples=np.random.gumbel(0,1,size=total_dims)
+            #Now we could add this pertubation to the logprob
+            perturb_logprob=tf.math.log(concat_output)+gumbel_samples
+
+            #Now we will have to select the top-k
+            _,indices=tf.math.top_k(perturb_logprob,k=self.sparsity_factor)
+            #Also we we need the log prob of those indices
+            interv_loc_prob=tf.gather(concat_output,indices,
+                                        axis=0,batch_dims=0)
+        else:
+            raise NotImplementedError
 
         #Now once we have indices we reconvert them to locations of interv
         interv_locs=self._get_intervention_locations(indices)
@@ -184,16 +223,24 @@ class AutoEncoder(keras.Model):
     overall loss.
     '''
     def __init__(self,dense_config,coef_config,sparsity_factor,
-                    oracle,do_config,**kwargs):
+                    oracle,do_config,temp_config,sample_strategy,**kwargs):
         super(AutoEncoder,self).__init__(**kwargs)
+        #Now we will also maintain a global step for our decay
+        self.global_step=tf.Variable(0.0,trainable=False,
+                                    dtype="tf.float64",name="gstep")
+
         #Now we will initialize our Encoder and Decoder
-        self.encoder=Encoder(dense_config,coef_config)
-        self.decoder=Decoder(sparsity_factor,coef_config,oracle,do_config)
+        self.encoder=Encoder(dense_config,coef_config,
+                            temp_config,self.global_step)
+        self.decoder=Decoder(sparsity_factor,coef_config,oracle,
+                            do_config,sample_strategy)
 
     def call(self,inputs):
         #First of all calling the encoder to map us to latent space
-        coef_output_avg=self.encoder(inputs)
+        concat_output=self.encoder(inputs)
         #Now we will get the likliehood of the samples (kept tack internally)
-        samples_logprob=self.decoder(inputs,coef_output_avg)
+        samples_logprob=self.decoder(inputs,concat_output)
+        #We have to update the global step after each update
+        self.global_step.assign_add(1.0)
 
         return samples_logprob
