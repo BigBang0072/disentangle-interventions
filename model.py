@@ -2,6 +2,8 @@ import tensorflow as tf
 from tensorflow import keras
 tf.random.set_seed(211)
 import pdb
+import numpy as np
+np.random.seed(211)
 from pprint import pprint
 
 from data_handle import BnNetwork
@@ -33,18 +35,12 @@ class Encoder(keras.layers.Layer):
         self.coef_layers=coef_layers
 
         #Initializing the temperature variable
-        self.soften,init_temp,temp_decay_rate,temp_decay_step=temp_config
+        (self.soften,self.init_temp,
+            self.temp_decay_rate,self.temp_decay_step)=temp_config
         if self.soften==True:
-            assert 0.0<=temp_decay_rate<=1,"Decay rate in wrong range!!"
-            #Now we have to decay this as the training goes on
-            self.temperature=init_temp*tf.math.pow(
-                                temp_decay_rate,global_step/temp_decay_step)
-            #Possible porblem is that this will not be updated as graph runs
-            self.temperature=tf.clip_by_value(self.temperature,
-                                            clip_value_min=1.0,
-                                            clip_value_max=init_value)
+            assert 0.0<=self.temp_decay_rate<=1,"Decay rate in wrong range!!"
 
-    def call(self,inputs):
+    def call(self,inputs,global_step):
         '''
         We could encode out input categories both as one-hot OR
         continuous vaued number giving only one dimension per node.
@@ -64,6 +60,17 @@ class Encoder(keras.layers.Layer):
             coef_actv=coef_layer(X)
             #Using temperature to smoothen out the probabilities
             if self.soften==True:
+                #Now we have to decay this as the training goes on
+                self.temperature=self.init_temp*tf.math.pow(
+                                            self.temp_decay_rate,
+                                            global_step/self.temp_decay_step)
+                #Clipping the value to not go below 1
+                self.temperature=tf.clip_by_value(self.temperature,
+                                                clip_value_min=1.0,
+                                                clip_value_max=self.init_temp)
+                print("TEMPERATURE:",self.temperature)
+
+                #Applying the softening
                 coef_actv=coef_actv/self.temperature
 
             #Now we will expoentitate to convert to probability
@@ -227,7 +234,7 @@ class AutoEncoder(keras.Model):
         super(AutoEncoder,self).__init__(**kwargs)
         #Now we will also maintain a global step for our decay
         self.global_step=tf.Variable(0.0,trainable=False,
-                                    dtype="float64",name="gstep")
+                                    dtype="float32",name="gstep")
 
         #Now we will initialize our Encoder and Decoder
         self.encoder=Encoder(dense_config,coef_config,
@@ -237,7 +244,7 @@ class AutoEncoder(keras.Model):
 
     def call(self,inputs):
         #First of all calling the encoder to map us to latent space
-        concat_output=self.encoder(inputs)
+        concat_output=self.encoder(inputs,self.global_step)
         #Now we will get the likliehood of the samples (kept tack internally)
         samples_logprob=self.decoder(inputs,concat_output)
         #We have to update the global step after each update
