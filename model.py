@@ -11,7 +11,7 @@ class Encoder(keras.layers.Layer):
     This class will encode the given sample to the mixing coefficient space.
     '''
     def __init__(self,dense_config,coef_config,
-                temp_config,global_step,,**kwargs):
+                temp_config,global_step,**kwargs):
         '''
         dense_config    : [[num_unit1,activation1],[num_unit2,activation2]...]
         coef_config     : the cardinality of each of the coefficient (pi^{..})
@@ -34,7 +34,7 @@ class Encoder(keras.layers.Layer):
 
         #Initializing the temperature variable
         self.soften,init_temp,temp_decay_rate,temp_decay_step=temp_config
-        if soften==True:
+        if self.soften==True:
             assert 0.0<=temp_decay_rate<=1,"Decay rate in wrong range!!"
             #Now we have to decay this as the training goes on
             self.temperature=init_temp*tf.math.pow(
@@ -63,7 +63,7 @@ class Encoder(keras.layers.Layer):
             #Applying the layer and exp to get unnormalized probability
             coef_actv=coef_layer(X)
             #Using temperature to smoothen out the probabilities
-            if soften==True:
+            if self.soften==True:
                 coef_actv=coef_actv/self.temperature
 
             #Now we will expoentitate to convert to probability
@@ -227,7 +227,7 @@ class AutoEncoder(keras.Model):
         super(AutoEncoder,self).__init__(**kwargs)
         #Now we will also maintain a global step for our decay
         self.global_step=tf.Variable(0.0,trainable=False,
-                                    dtype="tf.float64",name="gstep")
+                                    dtype="float64",name="gstep")
 
         #Now we will initialize our Encoder and Decoder
         self.encoder=Encoder(dense_config,coef_config,

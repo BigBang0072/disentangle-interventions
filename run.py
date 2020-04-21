@@ -51,7 +51,9 @@ def trainer(trainer_config):
                         coef_config=trainer_config["coef_config"],
                         sparsity_factor=trainer_config["sparsity_factor"],
                         oracle=oracle,
-                        do_config=trainer_config["do_config"])
+                        do_config=trainer_config["do_config"],
+                        temp_config=trainer_config["temp_config"],
+                        sample_strategy=trainer_config["sample_strategy"])
     #Creating our optimizer
     optimizer=tf.keras.optimizers.Adam(trainer_config["learning_rate"],
                                     decay=trainer_config["decay_rate"])
@@ -100,7 +102,7 @@ def trainer(trainer_config):
 
 if __name__=="__main__":
     #Setting up the parameters for the dataset
-    graph_name="alarm"
+    graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
                 [[2,],[0],0.2],
@@ -125,9 +127,17 @@ if __name__=="__main__":
     trainer_config["shuffle_buffer"]=500
     trainer_config["batch_size"]=100
     trainer_config["dense_config"]=dense_config
-    trainer_config["sparsity_factor"]=90
+    trainer_config["sparsity_factor"]=17
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
+
+    soften=False
+    init_temp=1000
+    temp_decay_rate=0.95
+    temp_decay_step=10          #sample_size/batch_size = num steps per epoch
+    trainer_config["temp_config"]=[soften,init_temp,
+                                    temp_decay_rate,temp_decay_step]
+    trainer_config["sample_strategy"]="top-k"
 
     trainer_config["verbose"]=5
     trainer_config["epochs"]=25
