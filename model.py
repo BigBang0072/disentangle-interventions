@@ -31,10 +31,8 @@ class Encoder(keras.layers.Layer):
 
         #Now we will initialize the final layer layers # TODO:
         assert coef_config[-1]==1,"Last config should be for base-dist"
-        coef_layers=[]
-        for cid,units in enumerate(coef_config):
-            coef_layers.append(keras.layers.Dense(units,activation=None))
-        self.coef_layers=coef_layers
+        output_units=sum(coef_config)
+        self.coef_layer=keras.layers.Dense(output_units,activation=None)
 
         #Initializing the temperature variable
         (self.soften,self.init_temp,
@@ -42,7 +40,7 @@ class Encoder(keras.layers.Layer):
         if self.soften==True:
             assert 0.0<=self.temp_decay_rate<=1,"Decay rate in wrong range!!"
 
-    def call(self,inputs,global_step):
+    def call(self,inputs):
         '''
         We could encode out input categories both as one-hot OR
         continuous vaued number giving only one dimension per node.
@@ -55,47 +53,30 @@ class Encoder(keras.layers.Layer):
             X=layer(X)
 
         #Now we will have to generate the distribution in latent variable
-        coef_activations=[]
-        normalization_const=0.0
-        for coef_layer in self.coef_layers:
-            #Applying the layer and exp to get unnormalized probability
-            coef_actv=coef_layer(X)
-            #Using temperature to smoothen out the probabilities
-            if self.soften==True:
-                #Now we have to decay this as the training goes on
-                self.temperature=self.init_temp*tf.math.pow(
-                                            self.temp_decay_rate,
-                                            global_step/self.temp_decay_step)
-                #Clipping the value to not go below 1
-                self.temperature=tf.clip_by_value(self.temperature,
-                                                clip_value_min=1.0,
-                                                clip_value_max=self.init_temp)
-                print("TEMPERATURE:",self.temperature)
-                #Adding summary for temperature
-                with self.smry_writer.as_default():
-                    tf.summary.scalar("temperature",self.temperature,
-                                        step=int(self.global_step.value()))
+        coef_output=self.coef_layer(X)
+        #First of all we have to apply temperature if required
+        if self.soften==True:
+            #Now we have to decay this as the training goes on
+            temperature=self.init_temp*tf.math.pow(
+                                        self.temp_decay_rate,
+                                        self.global_step/self.temp_decay_step)
+            #Clipping the value to not go below 1
+            temperature=tf.clip_by_value(temperature,
+                                            clip_value_min=1.0,
+                                            clip_value_max=self.init_temp)
+            #Adding summary for temperature
+            with self.smry_writer.as_default():
+                tf.summary.scalar("temperature",temperature,
+                                    step=int(self.global_step.value()))
+            #Applying the temperature
+            coef_output=coef_output/temperature
 
-                #Applying the softening
-                coef_actv=coef_actv/self.temperature
+        #Now we will have to perform softmax for the output
+        coef_output=tf.nn.softmax(coef_output,axis=1)
+        #Now we will average the distirbution over all the samples
+        coef_output=tf.reduce_mean(coef_output,axis=0)
 
-            #Now we will expoentitate to convert to probability
-            coef_actv=tf.math.exp(coef_actv)#BEWARE: inf,use subtrac trick
-            coef_activations.append(coef_actv)
-
-            #Adding up the contribution to normalize later
-            normalization_const+=tf.reduce_sum(coef_actv,axis=1,keepdims=True)
-        #Now we will normalize the output taking all the nodes into account
-        coef_output=[coef_actv/normalization_const
-                                        for coef_actv in coef_activations]
-        #Now we have to get the average prediction of all the sample about mixt
-        coef_output_avg=[tf.reduce_mean(coef_prob,axis=0)
-                                        for coef_prob in coef_output]
-
-        #First of all we have to stack all the output into one single tensor
-        concat_output=tf.concat(coef_output_avg,axis=0)
-
-        return concat_output
+        return coef_output
 
 class Decoder(keras.layers.Layer):
     '''
@@ -309,7 +290,7 @@ class AutoEncoder(keras.Model):
 
     def call(self,inputs):
         #First of all calling the encoder to map us to latent space
-        concat_output=self.encoder(inputs,self.global_step)
+        concat_output=self.encoder(inputs)
         #Now we will get the likliehood of the samples (kept tack internally)
         samples_logprob=self.decoder(inputs,concat_output)
         #We have to update the global step after each update
