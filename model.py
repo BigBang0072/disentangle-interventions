@@ -13,13 +13,15 @@ class Encoder(keras.layers.Layer):
     This class will encode the given sample to the mixing coefficient space.
     '''
     def __init__(self,dense_config,coef_config,
-                temp_config,global_step,**kwargs):
+                temp_config,global_step,smry_writer,**kwargs):
         '''
         dense_config    : [[num_unit1,activation1],[num_unit2,activation2]...]
         coef_config     : the cardinality of each of the coefficient (pi^{..})
                             Ensure that one pi is for init-dist with 1 card.
         '''
         super(Encoder,self).__init__(**kwargs)
+        self.smry_writer=smry_writer
+        self.global_step=global_step
         #Now we will initialize the layers to be used in encoder
         dense_layers=[]
         for lid,config in enumerate(dense_config):
@@ -69,6 +71,10 @@ class Encoder(keras.layers.Layer):
                                                 clip_value_min=1.0,
                                                 clip_value_max=self.init_temp)
                 print("TEMPERATURE:",self.temperature)
+                #Adding summary for temperature
+                with self.smry_writer.as_default():
+                    tf.summary.scalar("temperature",self.temperature,
+                                        step=int(self.global_step.value()))
 
                 #Applying the softening
                 coef_actv=coef_actv/self.temperature
@@ -99,9 +105,14 @@ class Decoder(keras.layers.Layer):
     Here we will have control over sparsity, choosing the top probable
     interventions in mixture and then calculating likliehood.
     '''
+    lookup_i2l=None         #Lookup table to convert flat index to interv-loc
+    lookup_l2i=None         #Convert loc to flat index
+
     def __init__(self,sparsity_factor,coef_config,oracle,do_config,
-                sample_strategy,**kwargs):
+                sample_strategy,global_step,smry_writer,**kwargs):
         super(Decoder,self).__init__(**kwargs)
+        self.global_step=global_step
+        self.smry_writer=smry_writer
         #Initilaizing the oracle which is handling all PGM based work
         self.oracle=oracle
         self.do_config=do_config
@@ -154,9 +165,13 @@ class Decoder(keras.layers.Layer):
         #Now getting the log probability of seeing the samples
         samples_logprob=self._calculate_sample_likliehood(interv_loc_prob,
                                                         sample_loc_prob)
+
         #Calculating the metrics to track progress
         doRecall=self._calculate_doRecall(interv_locs,self.do_config)
         self.add_metric(doRecall,name="doRecall",aggregation="mean")
+        #Calculating the mse of the actual intervened pi and predicted
+        doMAE=self._calculate_doMSE(concat_output,self.do_config)
+        self.add_metric(doMAE,name="doMAE",aggregation="mean")
 
         print("inerv_locs:",interv_locs)
         print("interv_loc_prob:",interv_loc_prob)
@@ -171,13 +186,21 @@ class Decoder(keras.layers.Layer):
         '''
         #Converting the indices to location
         indices=indices.numpy()
-        #Creating a lookup table for locations
-        lookup_table=[]
-        for nidx in range(len(self.coef_config)):
-            for cidx in range(self.coef_config[nidx]):
-                lookup_table.append(([nidx],[cidx]))
+        if self.lookup_i2l==None:
+            #Creating a lookup table for locations
+            lookup_i2l={}
+            lookup_l2i={}
+            counter=0
+            for nidx in range(len(self.coef_config)):
+                for cidx in range(self.coef_config[nidx]):
+                    lookup_i2l[counter]=((nidx,),(cidx,))
+                    lookup_l2i[((nidx,),(cidx,))]=counter
+                    counter+=1
+            #Now we will hash this for later use
+            self.lookup_i2l=lookup_i2l
+            self.lookup_l2i=lookup_l2i
         #Now we are ready to convert 1-D indices to intervention location
-        interv_locs=[lookup_table[idx] for idx in indices]
+        interv_locs=[self.lookup_i2l[idx] for idx in indices]
         return interv_locs
 
     def _calculate_sample_likliehood(self,interv_loc_prob,sample_loc_prob,
@@ -223,7 +246,45 @@ class Decoder(keras.layers.Layer):
         #Now we are ready to calculate the recall
         recall=presence_count/total_count
         # pdb.set_trace()
+
+        #Adding the summary of recall
+        with self.smry_writer.as_default():
+            tf.summary.scalar("doRecall",recall,
+                                step=int(self.global_step.value()))
+
         return recall
+
+    def _calculate_doMSE(self,concat_output,do_config):
+        '''
+        To calculate the mse of actual itnervention coefficient and predicted
+        coefficient.
+        '''
+        #Getting the actual and predicted pis
+        actual_pis=[]
+        pred_pis=[]
+        adiff_pis=[]
+        for nodes,cats,pi in do_config:
+            actual_pis.append(pi)
+            #Now getting the predicted pi
+            pred_idx=self.lookup_l2i[(tuple(nodes),tuple(cats))]
+            pi_hat=concat_output[pred_idx]
+            pred_pis.append(pi_hat)
+
+            #Now we will individually add absolute error for each component
+            with self.smry_writer.as_default():
+                name=str((nodes,cats,pi))
+                adiff=abs(pi-pi_hat)
+                adiff_pis.append(adiff)
+                tf.summary.scalar(name,adiff,
+                                    step=int(self.global_step.value()))
+
+        #Also we will add the mean absolute error for all prediction
+        mean_adiff=np.mean(adiff_pis)
+        with self.smry_writer.as_default():
+            tf.summary.scalar("mae",mean_adiff,
+                                    step=int(self.global_step.value()))
+
+        return mean_adiff
 
 class AutoEncoder(keras.Model):
     '''
@@ -231,17 +292,20 @@ class AutoEncoder(keras.Model):
     overall loss.
     '''
     def __init__(self,dense_config,coef_config,sparsity_factor,
-                    oracle,do_config,temp_config,sample_strategy,**kwargs):
+                    oracle,do_config,temp_config,sample_strategy,
+                    smry_writer,**kwargs):
         super(AutoEncoder,self).__init__(**kwargs)
+        self.smry_writer=smry_writer
         #Now we will also maintain a global step for our decay
         self.global_step=tf.Variable(0.0,trainable=False,
                                     dtype="float32",name="gstep")
 
         #Now we will initialize our Encoder and Decoder
         self.encoder=Encoder(dense_config,coef_config,
-                            temp_config,self.global_step)
+                            temp_config,self.global_step,smry_writer)
         self.decoder=Decoder(sparsity_factor,coef_config,oracle,
-                            do_config,sample_strategy)
+                            do_config,sample_strategy,
+                            self.global_step,smry_writer)
 
     def call(self,inputs):
         #First of all calling the encoder to map us to latent space
