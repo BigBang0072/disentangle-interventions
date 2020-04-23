@@ -71,7 +71,6 @@ class Encoder(keras.layers.Layer):
                 self.temperature=tf.clip_by_value(self.temperature,
                                                 clip_value_min=1.0,
                                                 clip_value_max=self.init_temp)
-                print("TEMPERATURE:",self.temperature)
                 #Adding summary for temperature
                 with self.smry_writer.as_default():
                     tf.summary.scalar("temperature",self.temperature,
@@ -133,7 +132,7 @@ class Decoder(keras.layers.Layer):
         they are most probable for intervention to happen. Then use them to
         compute the likliehood.
         '''
-        if self.sample_strategy=="top-k":
+        if self.sample_strategy=="top-k" or temperature.numpy()==1.0:
             #Now we will retreive the tok-k position of interventions
             interv_loc_prob,indices=tf.math.top_k(concat_output,
                                                 k=self.sparsity_factor)
@@ -166,12 +165,14 @@ class Decoder(keras.layers.Layer):
         #Now getting the log probability of seeing the samples
         samples_logprob=self._calculate_sample_likliehood(interv_loc_prob,
                                                         sample_loc_prob)
+        #Update the theoretical minimum -ve log likliehood
+        self._get_sample_least_loss(self.do_config,inputs)
 
         #Calculating the metrics to track progress
         doRecall=self._calculate_doRecall(interv_locs,self.do_config)
         self.add_metric(doRecall,name="doRecall",aggregation="mean")
         #Calculating the mse of the actual intervened pi and predicted
-        doMAE=self._calculate_doMSE(concat_output,self.do_config)
+        doMAE,do_MAE_all=self._calculate_doMSE(concat_output,self.do_config)
         self.add_metric(doMAE,name="doMAE",aggregation="mean")
 
         print("inerv_locs:",interv_locs)
@@ -267,6 +268,15 @@ class Decoder(keras.layers.Layer):
         To calculate the mse of actual itnervention coefficient and predicted
         coefficient.
         '''
+        #Seeing if we also have initial distribution
+        _,_,pis=zip(*do_config)
+        phi=1-sum(pis)
+        if phi>0:
+            do_config=do_config+[(len(self.coef_config)-1,),(0,),phi]
+
+        #Initializing the variables for TV-distance
+        left_indices=set(range(len(self.lookup_i2l)))
+
         #Getting the actual and predicted pis
         actual_pis=[]
         pred_pis=[]
@@ -278,6 +288,9 @@ class Decoder(keras.layers.Layer):
             pi_hat=concat_output[pred_idx]
             pred_pis.append(pi_hat)
 
+            #Removing the already added index
+            left_indices.remove(pred_idx)
+
             #Now we will individually add absolute error for each component
             with self.smry_writer.as_default():
                 name=str((nodes,cats,pi))
@@ -288,11 +301,48 @@ class Decoder(keras.layers.Layer):
 
         #Also we will add the mean absolute error for all prediction
         mean_adiff=np.mean(adiff_pis)
+        #Also we will calculate the total variation distance
+        left_indices=list(left_indices)
+        left_predictions=np.concatenate((concat_output.numpy()[left_indices],
+                                                                adiff_pis))
+        mean_adiff_all=np.mean(left_predictions)
+        #Writing the summary
         with self.smry_writer.as_default():
             tf.summary.scalar("mae",mean_adiff,
                                     step=int(self.global_step.value()))
+            tf.summary.scalar("mae_all",mean_adiff_all,
+                                    step=int(self.global_step.value()))
 
-        return mean_adiff
+
+        return mean_adiff,mean_adiff_all
+
+    def _get_sample_least_loss(self,do_config,inputs):
+        '''
+        This function will calculate the -ve loglikliehood of samples,when the
+        actual intervention are given.
+        This will be theoretical minimum of the loss.
+        '''
+        nodes,cats,pis=zip(*do_config)
+        nodes,cats,pis=list(nodes),list(cats),list(pis)
+        interv_locs=list(zip(nodes,cats))
+
+        #Adding the base dist if its in mixture
+        phi=1-sum(pis)
+        if phi>0:
+            pis.append(phi)
+            interv_locs.append(self.lookup_i2l[len(self.interv_i2l)-1])
+
+        #Getting the sample probability for these intervention location
+        sample_loc_prob=self.oracle.get_sample_probability(interv_locs,
+                                                    inputs)
+        #Now we will calculate the log prob
+        samples_logprob=self._calculate_sample_likliehood(pis,
+                                                        sample_loc_prob)
+        with self.smry_writer.as_default():
+            tf.summary.scalar("loss_tmin",samples_logprob*(-1),
+                                        step=int(self.global_step.value()))
+
+        return samples_logprob
 
 class AutoEncoder(keras.Model):
     '''

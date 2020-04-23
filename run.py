@@ -135,22 +135,22 @@ if __name__=="__main__":
     trainer_config={}
     trainer_config["modelpath"]=modelpath
     trainer_config["do_config"]=do_config
-    trainer_config["sample_size"]=1000
+    trainer_config["sample_size"]=10000
     trainer_config["savepath"]=None
 
     #Training related parameters
-    trainer_config["shuffle_buffer"]=500
-    trainer_config["batch_size"]=100
+    trainer_config["shuffle_buffer"]=5000
+    trainer_config["batch_size"]=1000
     trainer_config["dense_config"]=dense_config
-    trainer_config["sparsity_factor"]=17
+    trainer_config["sparsity_factor"]=6
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
     trainer_config["verbose"]=5
     trainer_config["epochs"]=20
 
     #Parameters for sampling from the latent space
-    soften=False                                #for using temperature
-    trainer_config["sample_strategy"]="top-k"   #top-k or gumbel
+    soften=True                                #for using temperature
+    trainer_config["sample_strategy"]="gumbel"   #top-k or gumbel
     init_temp=1000
     temp_decay_rate=0.5
     temp_decay_step=10          #sample_size/batch_size = num steps per epoch
@@ -158,7 +158,7 @@ if __name__=="__main__":
                                     temp_decay_rate,temp_decay_step]
 
     #Variables for tensorboard summary
-    trainer_config["rnum"]="2.temp"
+    trainer_config["rnum"]="6.temp"
     trainer_config["smry_path"]="temp/{}/{}/".format(graph_name,
                                                     trainer_config["rnum"])
 
