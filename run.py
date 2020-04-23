@@ -90,6 +90,10 @@ def trainer(trainer_config):
         #Adding the loss to the summary
         with smry_writer.as_default():
             tf.summary.scalar("loss",loss,step=int(model.global_step.value()))
+            #Adding summary for learning rate
+            lr=(trainer_config["learning_rate"]
+                /(1+trainer_config["decay_rate"]*model.global_step.value()))
+            tf.summary.scalar("lr",lr,step=int(model.global_step.value()))
 
         #Getting the metrics from the model
         doRecall=float(model.metrics[0].result())
@@ -154,7 +158,7 @@ if __name__=="__main__":
                                     temp_decay_rate,temp_decay_step]
 
     #Variables for tensorboard summary
-    trainer_config["rnum"]="2"
+    trainer_config["rnum"]="2.temp"
     trainer_config["smry_path"]="temp/{}/{}/".format(graph_name,
                                                     trainer_config["rnum"])
 

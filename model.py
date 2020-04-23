@@ -22,6 +22,7 @@ class Encoder(keras.layers.Layer):
         super(Encoder,self).__init__(**kwargs)
         self.smry_writer=smry_writer
         self.global_step=global_step
+        self.temperature=None
         #Now we will initialize the layers to be used in encoder
         dense_layers=[]
         for lid,config in enumerate(dense_config):
@@ -42,7 +43,7 @@ class Encoder(keras.layers.Layer):
         if self.soften==True:
             assert 0.0<=self.temp_decay_rate<=1,"Decay rate in wrong range!!"
 
-    def call(self,inputs,global_step):
+    def call(self,inputs):
         '''
         We could encode out input categories both as one-hot OR
         continuous vaued number giving only one dimension per node.
@@ -64,8 +65,8 @@ class Encoder(keras.layers.Layer):
             if self.soften==True:
                 #Now we have to decay this as the training goes on
                 self.temperature=self.init_temp*tf.math.pow(
-                                            self.temp_decay_rate,
-                                            global_step/self.temp_decay_step)
+                                        self.temp_decay_rate,
+                                        self.global_step/self.temp_decay_step)
                 #Clipping the value to not go below 1
                 self.temperature=tf.clip_by_value(self.temperature,
                                                 clip_value_min=1.0,
@@ -126,7 +127,7 @@ class Decoder(keras.layers.Layer):
         self.sample_strategy=sample_strategy
         assert sample_strategy in ["top-k","gumbel"],"Wrong sample strategy"
 
-    def call(self,inputs,concat_output):
+    def call(self,inputs,concat_output,temperature):
         '''
         This function will select the top-|sparsity| number of node which says
         they are most probable for intervention to happen. Then use them to
@@ -229,15 +230,22 @@ class Decoder(keras.layers.Layer):
         This function will calculate the recall of the intervention done
         actually and then present in the top-Sparsity candidates.
         '''
+        #Keep inportant variables ready
+        _,_,pis=zip(*do_config)
+        phi=1-sum(pis)
         total_count=len(do_config)*1.0
+
+        #Now we want to see the top-I places in interv_locs (recall@I)
+        splice_len=int(total_count)+1 if phi>0 else int(total_count)
+        interv_locs=interv_locs[0:splice_len]
+
+        #Now we will start counting
         presence_count=0.0
         for do in do_config:
             nodes,cats,_=do
             if (nodes,cats) in interv_locs:
                 presence_count+=1
         #Now we will also have to track the no intervention case
-        _,_,pis=zip(*do_config)
-        phi=1-sum(pis)
         no_interv_idx=len(self.coef_config)-1
         if phi>0:
             total_count+=1
@@ -249,7 +257,7 @@ class Decoder(keras.layers.Layer):
 
         #Adding the summary of recall
         with self.smry_writer.as_default():
-            tf.summary.scalar("doRecall",recall,
+            tf.summary.scalar("doRecall@I",recall,
                                 step=int(self.global_step.value()))
 
         return recall
@@ -309,9 +317,10 @@ class AutoEncoder(keras.Model):
 
     def call(self,inputs):
         #First of all calling the encoder to map us to latent space
-        concat_output=self.encoder(inputs,self.global_step)
+        concat_output=self.encoder(inputs)
         #Now we will get the likliehood of the samples (kept tack internally)
-        samples_logprob=self.decoder(inputs,concat_output)
+        samples_logprob=self.decoder(inputs,concat_output,
+                                    self.encoder.temperature)
         #We have to update the global step after each update
         self.global_step.assign_add(1.0)
 
