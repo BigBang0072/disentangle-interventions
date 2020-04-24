@@ -80,20 +80,14 @@ class Encoder(keras.layers.Layer):
                 coef_actv=coef_actv/self.temperature
 
             #Now we will expoentitate to convert to probability
-            coef_actv=tf.math.exp(coef_actv)#BEWARE: inf,use subtrac trick
             coef_activations.append(coef_actv)
 
-            #Adding up the contribution to normalize later
-            normalization_const+=tf.reduce_sum(coef_actv,axis=1,keepdims=True)
-        #Now we will normalize the output taking all the nodes into account
-        coef_output=[coef_actv/normalization_const
-                                        for coef_actv in coef_activations]
-        #Now we have to get the average prediction of all the sample about mixt
-        coef_output_avg=[tf.reduce_mean(coef_prob,axis=0)
-                                        for coef_prob in coef_output]
+        #Now we will concatenate all the layers in one single vector
+        concat_output=tf.concat(coef_activations,axis=1)
+        concat_output=tf.nn.softmax(concat_output,axis=1)
 
-        #First of all we have to stack all the output into one single tensor
-        concat_output=tf.concat(coef_output_avg,axis=0)
+        #Now we have to get the average prediction of all the sample about mixt
+        coef_output=tf.reduce_mean(concat_output,axis=0)
 
         return concat_output
 
