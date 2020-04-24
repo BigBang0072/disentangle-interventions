@@ -116,7 +116,7 @@ def trainer(trainer_config):
 
 if __name__=="__main__":
     #Setting up the parameters for the dataset
-    graph_name="asia"
+    graph_name="alarm"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
                 ((2,),(0,),0.2),
@@ -142,7 +142,7 @@ if __name__=="__main__":
     trainer_config["shuffle_buffer"]=5000
     trainer_config["batch_size"]=1000
     trainer_config["dense_config"]=dense_config
-    trainer_config["sparsity_factor"]=6
+    trainer_config["sparsity_factor"]=20
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
     trainer_config["verbose"]=5
@@ -158,7 +158,7 @@ if __name__=="__main__":
                                     temp_decay_rate,temp_decay_step]
 
     #Variables for tensorboard summary
-    trainer_config["rnum"]="6.temp"
+    trainer_config["rnum"]="6.2"
     trainer_config["smry_path"]="temp/{}/{}/".format(graph_name,
                                                     trainer_config["rnum"])
 

@@ -144,6 +144,8 @@ class Decoder(keras.layers.Layer):
                                         axis=0,batch_dims=0)
         else:
             raise NotImplementedError
+        #Since after sampling we are not renormalizing the probability, we will
+        interv_loc_prob=tf.nn.softmax(interv_loc_prob)
 
         #Now once we have indices we reconvert them to locations of interv
         interv_locs=self._get_intervention_locations(indices)
