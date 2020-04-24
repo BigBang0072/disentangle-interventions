@@ -87,7 +87,7 @@ class Encoder(keras.layers.Layer):
         concat_output=tf.nn.softmax(concat_output,axis=1)
 
         #Now we have to get the average prediction of all the sample about mixt
-        coef_output=tf.reduce_mean(concat_output,axis=0)
+        concat_output=tf.reduce_mean(concat_output,axis=0)
 
         return concat_output
 
