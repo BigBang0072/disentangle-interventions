@@ -14,8 +14,8 @@ class LatentSlot(keras.layers.Layer):
     S-of these slots.
     '''
     final_input=None        #This will be after additional dense is applied
-    self.temperature=None   #Holding the current temperature
-    self.tau=None           #The current cutoff value
+    temperature=None        #Holding the current temperature
+    tau=None                #The current cutoff value
 
     def __init__(self,coef_config,sp_dense_config,
                 temp_config,global_step,smry_writer,
@@ -100,7 +100,7 @@ class LatentSlot(keras.layers.Layer):
         #Now we will generate the distribution over the category of each node
         all_cat_prob=[]
         all_cat_idx=[]
-        for nidx,cout_layer,num_cat in enumerate(
+        for nidx,(cout_layer,num_cat) in enumerate(
                                 zip(self.cout_layers,self.output_config)):
             #Getting a valid distribution among the nodes
             cout=cout_layer(H)
@@ -166,7 +166,7 @@ class LatentSlot(keras.layers.Layer):
         else:
             raise NotImplementedError
 
-        return cat_prob,cat_idx
+        return cat_prob,tf.squeeze(cat_idx)
 
     def _get_intervention_locations(self,above_tau,all_cat_idx):
         '''
@@ -180,7 +180,7 @@ class LatentSlot(keras.layers.Layer):
         for tidx in range(above_tau_np.shape[0]):
             if(above_tau_np[tidx]==True):
                 node,cat=all_cat_idx[tidx]
-                interv_nodes.append(node)
+                interv_nodes.append(np.int32(node))
                 interv_cats.append(cat.numpy())
         interv_loc=(tuple(interv_nodes),tuple(interv_cats))
 
@@ -195,7 +195,7 @@ class LatentSpace(keras.layers.Layer):
     def __init__(self,sparsity_factor,
                 coef_config,sp_dense_config,sp_dense_config_base,
                 temp_config,global_step,smry_writer,
-                sample_strategy,cutoff_config,**kwagrgs):
+                sample_strategy,cutoff_config,**kwargs):
         super(LatentSpace,self).__init__(**kwargs)
         self.sparsity_factor=sparsity_factor
         self.base_num=len(coef_config)-1
@@ -239,15 +239,15 @@ class LatentSpace(keras.layers.Layer):
         for sp_layer in self.sp_dense_layers:
             H=sp_layer(H)
         #Now we will not pass it through sigmoid since we are normalizin ltr
-        base_score=H
+        base_score=tf.reduce_mean(H)
 
         #Adding this acore and loc to our list
-        interv_locs.append(((self.base_num,),(0,)))
+        interv_locs.append(((np.int32(self.base_num),),(np.int32(0),)))
         interv_locs_prob.append(base_score)
 
         #Now we will normalize the interv_loc_prob
-        interv_locs_prob=tf.concat(interv_locs_prob,axis=0)
-        interv_locs_prob=tf.softmax(interv_locs_prob,axis=0)
+        interv_locs_prob=tf.stack(interv_locs_prob,axis=0)
+        interv_locs_prob=tf.nn.softmax(interv_locs_prob,axis=0)
 
         return interv_locs,interv_locs_prob
 
@@ -271,7 +271,7 @@ class Encoder(keras.layers.Layer):
                                 keras.layers.Dense(units,activation=actvn))
 
         #Now we will initialize out Latent Output layer
-        latent_space=LatentSpace(sparsity_factor=sparsity_factor,
+        self.latent_space=LatentSpace(sparsity_factor=sparsity_factor,
                                 coef_config=coef_config,
                                 sp_dense_config=sp_dense_config,
                                 sp_dense_config_base=sp_dense_config_base,
@@ -286,13 +286,13 @@ class Encoder(keras.layers.Layer):
         Passing the input through encoder.
         '''
         #Passing though the initial dense layer for shared stem
-        X=input
+        X=inputs
         for layer in self.dense_layers:
             X=layer(X)
         shared_stem=X
 
         #Now we are ready for the predictions of internvetions
-        interv_locs,interv_locs_prob=latent_space(shared_stem)
+        interv_locs,interv_locs_prob=self.latent_space(shared_stem)
 
         return interv_locs,interv_locs_prob
 
@@ -313,6 +313,20 @@ class Decoder(keras.layers.Layer):
         Take the given intervention location and the mixture probbaility
         and conpute the sample log-prob.
         '''
+        #First converting interv_loc to number
+        def convert_np2int(interv_locs):
+            new_interv_locs=[]
+            for node_ids,cat_ids in interv_locs:
+                #Converting the numpy integer to regular ones
+                new_node_ids=[int(node_id) for node_id in node_ids]
+                new_cat_ids=[int(cat_id) for cat_id in cat_ids]
+                #Adding them to the locs list
+                new_interv_locs.append(
+                            (tuple(new_node_ids),tuple(new_cat_ids)))
+            return new_interv_locs
+
+        interv_locs=convert_np2int(interv_locs)
+
         #Getting the probability of samples for each location
         sample_locs_prob=self.oracle.get_sample_probability(interv_locs,
                                                             inputs)
@@ -367,13 +381,13 @@ class AutoEncoder(keras.Model):
                             sp_dense_config=sp_dense_config,
                             sp_dense_config_base=sp_dense_config_base,
                             temp_config=temp_config,
-                            global_step=global_step,
+                            global_step=self.global_step,
                             smry_writer=smry_writer,
                             sample_strategy=sample_strategy,
                             cutoff_config=cutoff_config)
         #Creating our decoder
         self.decoder=Decoder(oracle=oracle,
-                            global_step=global_step,
+                            global_step=self.global_step,
                             smry_writer=smry_writer)
 
     def call(self,inputs):

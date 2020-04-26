@@ -271,8 +271,8 @@ class BnNetwork():
         for loc in interv_locs:
             node_ids,cat_ids=loc
             #TODO: Right now we will deal with single inerventions
-            assert len(node_ids)==1,"Multiple simultaneous intervention"
-            if node_ids[0]==len(self.topo_i2n):
+            #assert len(node_ids)==1,"Multiple simultaneous intervention"
+            if node_ids[0]==len(self.topo_i2n) and len(node_ids)==1:
                 interv_graphs.append(self.base_graph)
             else:
                 interv_graphs.append(self.do(node_ids,cat_ids))

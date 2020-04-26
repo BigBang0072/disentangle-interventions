@@ -57,7 +57,7 @@ def trainer(trainer_config):
                 temp_config=trainer_config["temp_config"],
                 smry_writer=smry_writer,
                 sample_strategy=trainer_config["sample_strategy"],
-                cutoff_config=trainer_config["cutoff_config"]
+                cutoff_config=trainer_config["cutoff_config"],
                 oracle=oracle,
                 )
     #Creating our optimizer
