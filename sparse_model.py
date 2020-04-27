@@ -4,6 +4,7 @@ import numpy as np
 import pdb
 tf.random.set_seed(211)
 np.random.seed(211)
+from pprint import pprint
 
 from data_handle import BnNetwork
 
@@ -231,6 +232,9 @@ class LatentSpace(keras.layers.Layer):
         interv_locs_prob=[]
         for sidx in range(self.sparsity_factor):
             interv_loc,interv_score=self.latent_slots[sidx](shared_input)
+            #Excluding the location if none of the intervention is selected
+            if len(interv_loc[0])==0 and len(interv_loc[1])==0:
+                continue
             interv_locs.append(interv_loc)
             interv_locs_prob.append(interv_score)
 
@@ -239,6 +243,7 @@ class LatentSpace(keras.layers.Layer):
         for sp_layer in self.sp_dense_layers:
             H=sp_layer(H)
         #Now we will not pass it through sigmoid since we are normalizin ltr
+        H=tf.nn.sigmoid(H)
         base_score=tf.reduce_mean(H)
 
         #Adding this acore and loc to our list
@@ -320,12 +325,15 @@ class Decoder(keras.layers.Layer):
                 #Converting the numpy integer to regular ones
                 new_node_ids=[int(node_id) for node_id in node_ids]
                 new_cat_ids=[int(cat_id) for cat_id in cat_ids]
+
                 #Adding them to the locs list
                 new_interv_locs.append(
                             (tuple(new_node_ids),tuple(new_cat_ids)))
             return new_interv_locs
 
         interv_locs=convert_np2int(interv_locs)
+        pprint(interv_locs)
+        pprint(interv_locs_prob)
 
         #Getting the probability of samples for each location
         sample_locs_prob=self.oracle.get_sample_probability(interv_locs,
