@@ -331,6 +331,7 @@ class LatentSpace2(keras.layers.Layer):
 
         #Now we will normalize the interv_loc_prob
         interv_locs_prob=tf.stack(interv_locs_prob,axis=0)
+        print("sel_log_prog:",interv_locs_prob)
         interv_locs_prob=tf.nn.softmax(interv_locs_prob,axis=0)
 
         return interv_locs,interv_locs_prob

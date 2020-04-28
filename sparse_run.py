@@ -122,7 +122,7 @@ if __name__=="__main__":
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
-                ((2,5),(0,1),0.2),
+                ((2,),(0,),0.2),
                 ((6,),(1,),0.3),
                 ((7,),(0,),0.3),
                 ((5,),(1,),0.2)
@@ -134,29 +134,27 @@ if __name__=="__main__":
                     [100,"relu"]
                 ]
     sp_dense_config=[
-                    [100,"relu"],
                 ]
     sp_dense_config_base=[
-                    [100,"relu"]
                 ]
 
     #Setting up the configuration for the model
     trainer_config={}
     trainer_config["modelpath"]=modelpath
     trainer_config["do_config"]=do_config
-    trainer_config["sample_size"]=1000
+    trainer_config["sample_size"]=10000
     trainer_config["savepath"]=None
 
     #Training related parameters
-    trainer_config["shuffle_buffer"]=500
-    trainer_config["batch_size"]=100
+    trainer_config["shuffle_buffer"]=5000
+    trainer_config["batch_size"]=1000
     trainer_config["dense_config"]=dense_config
     trainer_config["sp_dense_config"]=sp_dense_config
     trainer_config["sp_dense_config_base"]=sp_dense_config_base
     trainer_config["sparsity_factor"]=5
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
-    trainer_config["verbose"]=5
+    trainer_config["verbose"]=1
     trainer_config["epochs"]=20
 
     #Parameters for sampling from the latent space
