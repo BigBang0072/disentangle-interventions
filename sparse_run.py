@@ -6,7 +6,7 @@ tf.random.set_seed(211)
 np.random.seed(211)
 
 from data_handle import BnNetwork
-from sparse_model import AutoEncoder
+from model_sparse import AutoEncoder
 
 def get_coef_config(oracle):
     '''
@@ -122,7 +122,10 @@ if __name__=="__main__":
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
-                ((2,4),(0,1),0.7),
+                ((2,5),(0,1),0.2),
+                ((6,),(1,),0.3),
+                ((7,),(0,),0.3),
+                ((5,),(1,),0.2)
             ]
 
     #Deciding the configuration of the encoder
@@ -150,7 +153,7 @@ if __name__=="__main__":
     trainer_config["dense_config"]=dense_config
     trainer_config["sp_dense_config"]=sp_dense_config
     trainer_config["sp_dense_config_base"]=sp_dense_config_base
-    trainer_config["sparsity_factor"]=1
+    trainer_config["sparsity_factor"]=5
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
     trainer_config["verbose"]=5

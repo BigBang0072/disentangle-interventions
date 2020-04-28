@@ -29,6 +29,9 @@ class BnNetwork():
     loc2one=None            #Mapping from node,cat to location in one hot
     data_schema=None        #Empty dataframe to hold the reconverted people
 
+    #For intervention
+    orphan_nodes=set()        #Set of nodes which no longer will have parent
+
     def __init__(self,modelpath):
         #Reading the model from the file
         reader=BIFReader(modelpath)
@@ -81,12 +84,13 @@ class BnNetwork():
         do_graph=self.base_graph.copy()
 
         #Now one by one we will perform all the necessary intervnetions
+        orphan_nodes=set()
         for node_id,node_cat in zip(node_ids,node_cats):
-            self._single_do(do_graph,node_id,node_cat)
+            self._single_do(do_graph,node_id,node_cat,orphan_nodes)
 
         return do_graph
 
-    def _single_do(self,do_graph,node_idx,node_cat):
+    def _single_do(self,do_graph,node_idx,node_cat,orphan_nodes):
         '''
         This function will generate the intervention graph at the given
         node number and category according to topological order. This is limited
@@ -105,10 +109,15 @@ class BnNetwork():
 
         #Now we will perform the do operation
         do_graph.remove_node(node)
+        #We have not removed the edge from parents to current node in adj_set
+        #If we ensure not to edge later from any parent to it later then fine
+        orphan_nodes.add(node)
+
         #But this has removed all node and children connection. Readd
         do_graph.add_node(node)
         for child in self.adj_set[node]:
-            do_graph.add_edge(node,child)
+            if child not in orphan_nodes:
+                do_graph.add_edge(node,child)
         #Now we will add the cpds of childrens
         child_cur_cpds=[do_graph.get_cpds(child) for child in self.adj_set[node]]
         for cur_cpds,old_cpds in zip(child_cur_cpds,child_old_cpds):
@@ -359,7 +368,7 @@ if __name__=="__main__":
     network=BnNetwork(modelpath)
 
     #Testing internvention
-    do_graph=network.do([2,3,7],[1,0,1])
+    do_graph=network.do([3,4,1,5],[1,1,0,0])
     # pdb.set_trace()
 
     #Testing the sampler for mixture

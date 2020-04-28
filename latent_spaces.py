@@ -20,6 +20,7 @@ class LatentConfig2(keras.layers.Layer):
     config_logprob=None     #[batch,1]: to hold the score for this config
     interv_score=None       #The socre for the intervention sel in this config
     interv_loc=None         #The interv loc for this config
+    temperature=None        #the current temperature received from above
 
     def __init__(self,order_interv,soften,
                 sample_strategy,coef_config,**kwargs):
@@ -27,7 +28,7 @@ class LatentConfig2(keras.layers.Layer):
         order_interv    : the order of intervention.
         temperature     : the value of temperature to be used to smoothen
         '''
-        super(LatentConfig,self).__init__(**kwargs)
+        super(LatentConfig2,self).__init__(**kwargs)
         self.order_interv=order_interv
         # self.temperature=temperature
         self.soften=soften
@@ -44,6 +45,9 @@ class LatentConfig2(keras.layers.Layer):
         Now we will generate the distribution over the categories, sample
         the "order-interv" number of node-cat and give it to the slot to decide
         '''
+        #Keeping track of current temperature
+        self.temperature=temperature
+
         #Applying the final projection to the coef-layer
         nodes_logprob=[]
         wtn_nodes_selection=[]
@@ -94,8 +98,9 @@ class LatentConfig2(keras.layers.Layer):
         #Assigning the score and loc to class
         self.interv_loc=interv_loc
         self.interv_score=interv_score
+        # pdb.set_trace()
 
-        assert len(interv_loc)==self.order_interv,"Loc Size and Order mismatch"
+        assert len(interv_loc[0])==self.order_interv,"Loc Order mismatch"
         return self.config_logprob,self.interv_score,self.interv_loc
 
     def _sample(self,dist,k,dims):
@@ -161,7 +166,7 @@ class LatentSlot2(keras.layers.Layer):
                 soften,sample_strategy,**kwargs):
         '''
         '''
-        super(LatentSlot,self).__init__(**kwargs)
+        super(LatentSlot2,self).__init__(**kwargs)
         self.soften=soften
         # self.temperature=temperature
         self.sample_strategy=sample_strategy
@@ -176,9 +181,9 @@ class LatentSlot2(keras.layers.Layer):
         self.num_configs=len(coef_config)-1
         self.latent_configs=[]
         for cidx in range(self.num_configs):
-            config=LatentConfig(order_interv=cidx+1,
+            config=LatentConfig2(order_interv=cidx+1,
                                 soften=soften,
-                                sample_strategy=sample_strategy
+                                sample_strategy=sample_strategy,
                                 coef_config=coef_config)
             self.latent_configs.append(config)
 
@@ -188,6 +193,9 @@ class LatentSlot2(keras.layers.Layer):
         2. Then generate the distribution over different config (order of I)
         3. Select the most probable config and its intervention
         '''
+        #Keeping track of current temperature
+        self.temperature=temperature
+
         #Lets first specialize the stem from encoder
         H=encoder_hidden
         for layer in self.sp_dense_layers:
@@ -211,7 +219,8 @@ class LatentSlot2(keras.layers.Layer):
         configs_prob=tf.reduce_mean(configs_prob,axis=0)
 
         #Now we will sample one of the possible config
-        config_prob,config_idx=self._sample_config(configs_prob)
+        config_prob,config_idx=self._sample_config(configs_prob,
+                                                    self.num_configs)
 
         #Now we will retreive the corresponding location
         wtn_score,interv_loc=configs_selection[int(config_idx.numpy())]
@@ -220,7 +229,7 @@ class LatentSlot2(keras.layers.Layer):
 
         return interv_score,interv_loc
 
-    def _sample_config(self,configs_prob):
+    def _sample_config(self,configs_prob,num_config):
         '''
         Here, we could rescale the config (order probabilities) proportional
         to the size of search space for that order.
@@ -229,7 +238,7 @@ class LatentSlot2(keras.layers.Layer):
             prob,config_idx=tf.math.top_k(configs_prob,k=1)
         elif self.sample_strategy=="gumbel":
             #Generating the samples from gumbel distribution
-            gumbel_samples=np.random.gumbel(0,1,size=num_cat)
+            gumbel_samples=np.random.gumbel(0,1,size=num_config)
             #Perturbing the log-probability of samples
             perturb_logprob=tf.math.log(configs_prob)+gumbel_samples
 
@@ -251,7 +260,7 @@ class LatentSpace2(keras.layers.Layer):
                 sample_strategy,cutoff_config,**kwargs):
         '''
         '''
-        super(LatentSpace,self).__init__(**kwargs)
+        super(LatentSpace2,self).__init__(**kwargs)
         self.sparsity_factor=sparsity_factor
         self.base_num=len(coef_config)-1
         self.smry_writer=smry_writer
@@ -267,7 +276,7 @@ class LatentSpace2(keras.layers.Layer):
         #Now we will initialize the Latent slots
         self.latent_slots=[]
         for sidx in range(sparsity_factor):
-            latent_slot=LatentSlot(sp_dense_config=sp_dense_config,
+            latent_slot=LatentSlot2(sp_dense_config=sp_dense_config,
                                     coef_config=coef_config,
                                     soften=self.soften,
                                     sample_strategy=sample_strategy)
@@ -347,7 +356,7 @@ class LatentSlot1(keras.layers.Layer):
         coef_config     : same representation we used in previous Encoder
         sp_dense_config : config for further specialization of the shared inp
         '''
-        super(LatentSlot,self).__init__(**kwargs)
+        super(LatentSlot1,self).__init__(**kwargs)
         #Initializing our variabels
         self.coef_config=coef_config
         self.global_step=global_step
@@ -520,14 +529,14 @@ class LatentSpace1(keras.layers.Layer):
                 coef_config,sp_dense_config,sp_dense_config_base,
                 temp_config,global_step,smry_writer,
                 sample_strategy,cutoff_config,**kwargs):
-        super(LatentSpace,self).__init__(**kwargs)
+        super(LatentSpace1,self).__init__(**kwargs)
         self.sparsity_factor=sparsity_factor
         self.base_num=len(coef_config)-1
 
         #First of all we will initialize all the latent slots we need
         self.latent_slots=[]
         for sidx in range(sparsity_factor):
-            latent_slot=LatentSlot(coef_config=coef_config,
+            latent_slot=LatentSlot1(coef_config=coef_config,
                                     sp_dense_config=sp_dense_config,
                                     temp_config=temp_config,
                                     global_step=global_step,
