@@ -122,10 +122,7 @@ if __name__=="__main__":
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
-                ((2,),(0,),0.2),
-                ((6,),(1,),0.3),
-                ((7,),(0,),0.3),
-                ((5,),(1,),0.2)
+                ((2,4),(0,1),0.7),
             ]
 
     #Deciding the configuration of the encoder
@@ -153,7 +150,7 @@ if __name__=="__main__":
     trainer_config["dense_config"]=dense_config
     trainer_config["sp_dense_config"]=sp_dense_config
     trainer_config["sp_dense_config_base"]=sp_dense_config_base
-    trainer_config["sparsity_factor"]=6
+    trainer_config["sparsity_factor"]=1
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
     trainer_config["verbose"]=5
@@ -169,12 +166,12 @@ if __name__=="__main__":
                                     temp_decay_rate,temp_decay_step]
 
     #Parameters to control the cutoff value
-    tau_max=0.7
+    tau_max=0.1
     scale_factor=30
     trainer_config["cutoff_config"]=[tau_max,scale_factor]
 
     #Variables for tensorboard summary
-    trainer_config["rnum"]="1"
+    trainer_config["rnum"]="4"
     trainer_config["smry_path"]="temp/sparse/{}/{}/".format(graph_name,
                                                     trainer_config["rnum"])
 

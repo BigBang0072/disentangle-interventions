@@ -80,6 +80,7 @@ class LatentSlot(keras.layers.Layer):
         node_decision=tf.math.sigmoid(node_decision)
         #We have to average over examples to get expected decision
         node_decision=tf.reduce_mean(node_decision,axis=0)
+        print("node_decisions:",node_decision)
 
 
 
