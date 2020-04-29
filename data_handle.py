@@ -4,6 +4,7 @@ np.random.seed(211)
 import pandas as pd
 from toposort import toposort_flatten
 from collections import defaultdict
+import multiprocessing
 
 from pgmpy.readwrite import BIFReader
 from pgmpy.factors.discrete import TabularCPD
@@ -210,37 +211,6 @@ class BnNetwork():
         # pdb.set_trace()
         return samples_one_hot
 
-    def decode_sample_one_hot(self,samples_one_hot):
-        '''
-        This function will reconvert the samples to a dataframe as before,
-        just like papaji didnt get to know what mishap has happened.
-        '''
-        #Getting the empty dataframe
-        df=self.data_schema.copy()
-        #Now we are ready to reconvert peeps
-        all_row_entry=[]
-        for sidx in range(samples_one_hot.shape[0]):
-            sample=samples_one_hot[sidx,:]
-            assert sample.shape[0]==self.vector_length
-
-            #Now we will decode this example
-            row_entry={}
-            for tidx in range(self.vector_length):
-                val=sample[tidx]
-                if val==0:
-                    continue
-                else:
-                    node,cat=self.one2loc[tidx]
-                    row_entry[node]=cat
-
-            #Adding new row to the dataframe
-            # pdb.set_trace()
-            all_row_entry.append(pd.DataFrame(row_entry,index=[0]))
-
-        #Concatenating all the rows into one big dataframe
-        df=pd.concat(all_row_entry,ignore_index=True)
-        return df
-
     def _get_one_hot_mapping(self):
         '''
         Generate the location map from category number to one hot and
@@ -289,77 +259,169 @@ class BnNetwork():
         #Now we are ready to get sample prob for each interventions
         input_samples=input_samples.numpy()
         #reconvert the input samples from one hot to actual
-        input_samples=self.decode_sample_one_hot(input_samples)
+        # input_samples=self.decode_sample_one_hot(input_samples)
 
         #For each sample, generate the graph and calculate the probability
-        all_sample_prob=[]
-        for idx in range(input_samples.shape[0]):
-            sample=input_samples.iloc[idx]
-            sample_prob=[]
-            for graph in interv_graphs:
-                prob=self._get_graph_sample_probability(graph,sample)
-                sample_prob.append(prob)
-            all_sample_prob.append(sample_prob)
-        #Now converting this to a numpy array
-        all_sample_prob=np.array(all_sample_prob)
+        def worker_kernel(child_conn,child_samples,
+                            interv_graphs,network_parameters):
+            #First of all decode the sample from one-hot representation
+            child_samples=decode_sample_one_hot(child_samples,
+                                                network_parameters)
+
+            #Calculating the probability
+            all_sample_prob=[]
+            for idx in range(child_samples.shape[0]):
+                sample=child_samples.iloc[idx]
+                sample_prob=[]
+                for graph in interv_graphs:
+                    prob=_get_graph_sample_probability(graph,
+                                                    sample,network_parameters)
+                    sample_prob.append(prob)
+                all_sample_prob.append(sample_prob)
+            #Now converting this to a numpy array
+            all_sample_prob=np.array(all_sample_prob)
+            #Sending all the samples back to the parent
+            child_conn.send(all_sample_prob)
+            child_conn.close()
+
+        #Now we will create multiple workers to parallelize
+        njobs=multiprocessing.cpu_count()-2
+        num_per_job=int(np.ceil((input_samples.shape[0]*1.0)/njobs))
+        process_pipe_list=[]
+        process_list=[]
+        for jidx in range(njobs):
+            #Slicing our big input for our job
+            print("Worker:{} manipulating from:{} to:{}".format(jidx,
+                                                    jidx*num_per_job,
+                                                    (jidx+1)*num_per_job))
+            child_samples=input_samples[jidx*num_per_job:(jidx+1)*num_per_job]
+
+            #Now we will first create a pipe to receive results
+            parent_conn,child_conn=multiprocessing.Pipe()
+            process_pipe_list.append(parent_conn)
+
+            #Starting the child process
+            network_parameters={}
+            network_parameters["topo_i2n"]=self.topo_i2n
+            network_parameters["card_node"]=self.card_node
+            network_parameters["data_schema"]=self.data_schema.copy()
+            network_parameters["vector_length"]=self.vector_length
+            network_parameters["one2loc"]=self.one2loc
+
+            p=multiprocessing.Process(target=worker_kernel,
+                                        args=(child_conn,
+                                            child_samples,
+                                            interv_graphs,
+                                            network_parameters))
+            p.start()
+            process_list.append(p)
+
+        #Now we will receive the results for all the child (join)
+        child_probs=[parent_conn.recv() for parent_conn in process_pipe_list]
+        #Stopping all the process
+        [p.join() for p in process_list]
+
+        #Now we will return the final concatenated result
+        all_sample_prob=np.concatenate(child_probs,axis=0)
+        print("merged prob size:",all_sample_prob.shape)
         return all_sample_prob
 
-    def _get_graph_sample_probability(self,graph,sample):
+#Helper function to be used by parallel worker to compute probability of
+#individual sample
+def _get_graph_sample_probability(graph,sample,network_parameters):
+    '''
+    This function will calcuate the probability of a sample in a graph,
+    which will be later used to calcuate the overall mixture probability.
+
+    graph   : the graph on which we have to calculate the sample probability
+    sample  : the sample array in form of dictionary or numpy recarray
+
+    Since we cant vectorize this function, cuz every sample will generate,
+    a separate distribution and in that distribution we have to calculate
+    the probability. We will see later how to vectorize
+    '''
+    #Getting the network parametrs
+    topo_i2n=network_parameters["topo_i2n"]
+    card_node=network_parameters["card_node"]
+
+    def _get_columns_index(nodes_idx,nodes_card):
         '''
-        This function will calcuate the probability of a sample in a graph,
-        which will be later used to calcuate the overall mixture probability.
-
-        graph   : the graph on which we have to calculate the sample probability
-        sample  : the sample array in form of dictionary or numpy recarray
-
-        Since we cant vectorize this function, cuz every sample will generate,
-        a separate distribution and in that distribution we have to calculate
-        the probability. We will see later how to vectorize
+        This will convert the index to row major number for column of cpd to
+        access.
         '''
-        def _get_columns_index(nodes_idx,nodes_card):
-            '''
-            This will convert the index to row major number for column of cpd to
-            access.
-            '''
-            assert len(nodes_idx)==len(nodes_card)
-            multiplier=nodes_card.copy()
-            multiplier[-1]=1  #we dont have to offset last index
-            for tidx in range(len(nodes_card)-2,-1,-1):
-                multiplier[tidx]=nodes_card[tidx+1]*multiplier[tidx+1]
-            #Now we are ready with the offset multiplier
-            ridx=0
-            for tidx in range(len(nodes_idx)):
-                assert nodes_idx[tidx]<nodes_card[tidx]
-                ridx+=nodes_idx[tidx]*multiplier[tidx]
-            return ridx
+        assert len(nodes_idx)==len(nodes_card)
+        multiplier=nodes_card.copy()
+        multiplier[-1]=1  #we dont have to offset last index
+        for tidx in range(len(nodes_card)-2,-1,-1):
+            multiplier[tidx]=nodes_card[tidx+1]*multiplier[tidx+1]
+        #Now we are ready with the offset multiplier
+        ridx=0
+        for tidx in range(len(nodes_idx)):
+            assert nodes_idx[tidx]<nodes_card[tidx]
+            ridx+=nodes_idx[tidx]*multiplier[tidx]
+        return ridx
 
-        #Now we will start in the topological order to get prob
-        overall_prob=1.0
-        for nidx in range(len(self.topo_i2n)):
-            #Getting the information of node
-            node=self.topo_i2n[nidx]
-            node_cpd=graph.get_cpds(node)
-            #Getting the row in which to look
-            row_idx=node_val=sample[node]
+    #Now we will start in the topological order to get prob
+    overall_prob=1.0
+    for nidx in range(len(topo_i2n)):
+        #Getting the information of node
+        node=topo_i2n[nidx]
+        node_cpd=graph.get_cpds(node)
+        #Getting the row in which to look
+        row_idx=node_val=sample[node]
 
-            #Now we have to get the columns number
-            pnodes=(node_cpd.variables.copy())
-            pnodes.remove(node_cpd.variable)
-            col_idx=None
-            if len(pnodes)!=0:
-                pnodes_card=[self.card_node[pn] for pn in pnodes]
-                pnodes_vals=[sample[pn] for pn in pnodes]
-                col_idx=_get_columns_index(pnodes_vals,pnodes_card)
-                #Just to be safe we will reorder for now (Comment later for performance)
-                node_cpd.reorder_parents(pnodes)
+        #Now we have to get the columns number
+        pnodes=(node_cpd.variables.copy())
+        pnodes.remove(node_cpd.variable)
+        col_idx=None
+        if len(pnodes)!=0:
+            pnodes_card=[card_node[pn] for pn in pnodes]
+            pnodes_vals=[sample[pn] for pn in pnodes]
+            col_idx=_get_columns_index(pnodes_vals,pnodes_card)
+            #Just to be safe we will reorder for now (Comment later for performance)
+            node_cpd.reorder_parents(pnodes)
+        else:
+            col_idx=0
+
+        #Now we will calculate the probabilityof the node given its parents
+        prob_node_given_parents=node_cpd.get_values()[row_idx,col_idx]
+        #Updating the overall probability
+        overall_prob=overall_prob*prob_node_given_parents
+    return overall_prob
+
+def decode_sample_one_hot(samples_one_hot,network_parameters):
+    '''
+    This function will reconvert the samples to a dataframe as before,
+    just like papaji didnt get to know what mishap has happened.
+    '''
+    #Getting the network parameters
+    df=network_parameters["data_schema"]
+    vector_length=network_parameters["vector_length"]
+    one2loc=network_parameters["one2loc"]
+
+    #Now we are ready to reconvert peeps
+    all_row_entry=[]
+    for sidx in range(samples_one_hot.shape[0]):
+        sample=samples_one_hot[sidx,:]
+        assert sample.shape[0]==vector_length
+
+        #Now we will decode this example
+        row_entry={}
+        for tidx in range(vector_length):
+            val=sample[tidx]
+            if val==0:
+                continue
             else:
-                col_idx=0
+                node,cat=one2loc[tidx]
+                row_entry[node]=cat
 
-            #Now we will calculate the probabilityof the node given its parents
-            prob_node_given_parents=node_cpd.get_values()[row_idx,col_idx]
-            #Updating the overall probability
-            overall_prob=overall_prob*prob_node_given_parents
-        return overall_prob
+        #Adding new row to the dataframe
+        # pdb.set_trace()
+        all_row_entry.append(pd.DataFrame(row_entry,index=[0]))
+
+    #Concatenating all the rows into one big dataframe
+    df=pd.concat(all_row_entry,ignore_index=True)
+    return df
 
 if __name__=="__main__":
     #Testing the base model and intervention
