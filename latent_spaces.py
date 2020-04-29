@@ -203,31 +203,20 @@ class LatentSlot2(keras.layers.Layer):
 
         #Now we are ready to generate the configs and their distribution
         configs_logprob=[]
-        configs_selection=[]
+        configs_scores=[]
+        configs_locs=[]
         for config in self.latent_configs:
             logprob,wtn_score,wtn_loc=config(H,temperature)
 
             configs_logprob.append(logprob)
-            configs_selection.append((wtn_score,wtn_loc))
+            configs_scores.append(wtn_score)
+            configs_locs.append(wtn_loc)
 
-        #Now we will calculate the distribution on configs
-        configs_logprob=tf.concat(configs_logprob,axis=1)
-        if self.soften==True:
-            configs_logprob=configs_logprob/temperature
-        #Now getting a valid distribution over configs
-        configs_prob=tf.nn.softmax(configs_logprob,axis=1)
-        configs_prob=tf.reduce_mean(configs_prob,axis=0)
+        #All these locs from each config will be treated as on location
+        interv_scores=configs_scores
+        interv_locs=configs_locs
 
-        #Now we will sample one of the possible config
-        config_prob,config_idx=self._sample_config(configs_prob,
-                                                    self.num_configs)
-
-        #Now we will retreive the corresponding location
-        wtn_score,interv_loc=configs_selection[int(config_idx.numpy())]
-        #Computing the score for this intervention
-        interv_score=config_prob*wtn_score  #BEWARE of underflow
-
-        return interv_score,interv_loc
+        return interv_scores,interv_locs
 
     def _sample_config(self,configs_prob,num_config):
         '''
@@ -314,8 +303,8 @@ class LatentSpace2(keras.layers.Layer):
             interv_score,interv_loc=self.latent_slots[sidx](encoder_hidden,
                                                         self.temperature)
 
-            interv_locs_prob.append(interv_score)
-            interv_locs.append(interv_loc)
+            interv_locs_prob.extend(interv_score)
+            interv_locs.extend(interv_loc)
 
         #Now we will generate the contribution of the base distribution
         H=encoder_hidden
