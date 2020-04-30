@@ -4,6 +4,7 @@ import numpy as np
 tf.random.set_seed(211)
 np.random.seed(211)
 from pprint import pprint
+import pdb
 
 
 #############################################################################
@@ -21,6 +22,9 @@ class LatentConfig2(keras.layers.Layer):
     interv_score=None       #The socre for the intervention sel in this config
     interv_loc=None         #The interv loc for this config
     temperature=None        #the current temperature received from above
+
+    lookup_i2l=None         #To map the concatenated index to node-cat
+    lookup_l2i=None         #Reverse mapping for the above map
 
     def __init__(self,order_interv,soften,
                 sample_strategy,coef_config,**kwargs):
@@ -49,108 +53,116 @@ class LatentConfig2(keras.layers.Layer):
         self.temperature=temperature
 
         #Applying the final projection to the coef-layer
-        nodes_logprob=[]
+        couts_logprob=[]
         wtn_nodes_selection=[]
         for nidx,(cout_layer,num_cat) in enumerate(
                                 zip(self.cout_layers,self.output_config)):
             #Getting the distribution for this node
             cout_logprob=cout_layer(slot_hidden)
-            #Also, we will generate the node_log prob as sum of its cat logprob
-            nodes_logprob.append(
-                        tf.reduce_sum(cout_logprob,axis=1,keepdims=True))
+            couts_logprob.append(cout_logprob)
 
-            #Now soften the log-prob for exploration
-            if self.soften==True:
-                cout_logprob=cout_logprob/temperature
-            #Now getting a valid distirbution over the categories
-            cout=tf.nn.softmax(cout_logprob,axis=1)
-            cout=tf.reduce_mean(cout,axis=0)
-
-            #Now it's time to sample a category from each node
-            cat_prob,cat_idx=self._sample(dist=cout,k=1,dims=num_cat)
-            cat_idx=tf.squeeze(cat_idx)
-            wtn_nodes_selection.append((nidx,cat_idx,cat_prob))
-
-        #Now getting the distribution over the node
-        nodes_logprob=tf.concat(nodes_logprob,axis=1)
-        #Generating the log_prob for this particular config
-        self.config_logprob=tf.reduce_sum(nodes_logprob,axis=1,keepdims=True)
-
-        #Now we will soften this nodes selection also
+        #Now we will merge them all in one single vector
+        couts_logprob=tf.concat(couts_logprob,axis=1)
+        #Now we will create our two branch,first for selection
+        couts_logprob_temp=couts_logprob
         if self.soften==True:
-            nodes_logprob=nodes_logprob/self.temperature
-        #Now getting a valid distribution over the nodes
-        nodes_prob=tf.nn.softmax(nodes_logprob,axis=1)
-        nodes_prob=tf.reduce_mean(nodes_prob,axis=0)
+            couts_logprob_temp=couts_logprob/temperature
+        couts_temp=tf.nn.softmax(couts_logprob_temp,axis=1)
+        couts_temp=tf.reduce_mean(couts_temp,axis=0)
 
-        #Now its time to sample the nodes for this config
-        sel_nodes_prob,node_indices=self._sample(dist=nodes_prob,
-                                            k=self.order_interv,
-                                            dims=len(self.output_config))
+        #Now we will ready our score generation branch
+        couts_logprob_mean=tf.reduce_mean(couts_logprob,axis=0)
+
+        #Now let's sample the indices and the location
+        logscores,indices=self._sample(dist_logscore=couts_logprob_mean,
+                                        dist_temp=couts_temp,
+                                        k=self.order_interv)
 
 
-        #Now we have to generate the intervention location
-        sel_cats_prob,interv_loc=self._get_intervention_locations(
-                                                        node_indices,
-                                                        wtn_nodes_selection)
-        #Now we will generate score for this particular selection
-        interv_score=tf.reduce_sum(sel_nodes_prob*sel_cats_prob)
+        #Now its time to convert the indices into node-cat pair
+        interv_loc=self._get_intervention_locations(indices)
+        #Now we will calcuate one single value score for this loc
+        interv_score=tf.reduce_sum(logscores,axis=0)
+
         #Assigning the score and loc to class
         self.interv_loc=interv_loc
         self.interv_score=interv_score
         # pdb.set_trace()
 
         assert len(interv_loc[0])==self.order_interv,"Loc Order mismatch"
-        return self.config_logprob,self.interv_score,self.interv_loc
+        return self.interv_score,self.interv_loc
 
-    def _sample(self,dist,k,dims):
+    def _sample(self,dist_logscore,dist_temp,k):
         '''
-        dist    : distribution to sample from
-        k       : number of samples
-        dims    : the number of dimension in the distribution
+        dist_logscore   : the actual log-prob non-temperaturized
+        dist_temp       : the distribution with temp enabled
+        k               : number of samples
+        dims            : the number of dimension in the distribution
         '''
+        #Getting the dimension we obtain after stacking
+        dims=sum(self.output_config)
+
         if self.sample_strategy=="top-k" or self.temperature.numpy()==1.0:
-            probs,indices=tf.math.top_k(dist,k=k)
+            _,indices=tf.math.top_k(dist_temp,k=k)
         elif self.sample_strategy=="gumbel":
             #Generating the gumbel samples for perturbing
             gumbel_samples=np.random.gumbel(0,1,size=dims)
             #Perturbing the actual distribution
-            perturb_logprob=tf.math.log(dist)+gumbel_samples
+            perturb_logprob=tf.math.log(dist_temp)+gumbel_samples
 
             #Now we will select the top-k
             _,indices=tf.math.top_k(perturb_logprob,k=k)
-            probs=tf.gather(dist,indices,axis=0,batch_dims=0)
         else:
             raise NotImplementedError
 
-        return probs,indices
+        #Now we will select the score not from this softmaxed guys
+        logscores=tf.gather(dist_logscore,indices,axis=0,batch_dims=0)
+        # pdb.set_trace()
 
-    def _get_intervention_locations(self,node_indices,wtn_nodes_selection):
+        return logscores,indices
+
+    def _get_intervention_locations(self,indices):
         '''
         Based on the nodes selected, we will select the category for that node
-        '''
-        node_indices=node_indices.numpy().tolist()
 
+        Changeslog:
+        1. Now we will convert the indices gotten from concat of all indexes
+            to node-cat pair.
+            In case to cat from same node are selected we could remove them
+        '''
+        #First of all creating this lookup, for concat_indices to node-cat
+        if self.lookup_i2l==None:
+            #Creating a lookup table for locations
+            lookup_i2l={}
+            lookup_l2i={}
+            counter=0
+            for nidx in range(len(self.output_config)):
+                for cidx in range(self.output_config[nidx]):
+                    lookup_i2l[counter]=(nidx,cidx)
+                    lookup_l2i[(nidx,cidx)]=counter
+                    counter+=1
+            #Saving this hash for later runs
+            self.lookup_i2l=lookup_i2l
+            self.lookup_l2i=lookup_l2i
+
+        #Now we will reverse map the index to node-cat
         interv_nodes=[]
         interv_cats=[]
-        interv_cat_prob=[]
-        for nidx in node_indices:
-            #Retreiving the index and cat and its prob
-            idx,cidx,cat_prob=wtn_nodes_selection[nidx]
-            assert nidx==idx,"How did the order change!!"
+        indices=indices.numpy().tolist()
+        # pdb.set_trace()
+        for tidx in indices:
+            #Retreiving cat and node from index
+            node,cat=self.lookup_i2l[tidx]
 
             #Now we add the nodes and category
-            interv_nodes.append(np.int32(nidx))
-            interv_cats.append(cidx.numpy())
-            interv_cat_prob.append(cat_prob)
+            #if node not in interv_nodes:   #So, that we dont repreat cats
+            interv_nodes.append(np.int32(node))
+            interv_cats.append(np.int32(cat))
 
         #Now putting all of then in one loc variabel
         interv_loc=(tuple(interv_nodes),tuple(interv_cats))
 
-        #Getting the probability each of the category within nodes
-        interv_cat_prob=tf.concat(interv_cat_prob,axis=0)
-
-        return interv_cat_prob,interv_loc
+        return interv_loc
 
 class LatentSlot2(keras.layers.Layer):
     '''
@@ -206,9 +218,9 @@ class LatentSlot2(keras.layers.Layer):
         configs_scores=[]
         configs_locs=[]
         for config in self.latent_configs:
-            logprob,wtn_score,wtn_loc=config(H,temperature)
+            wtn_score,wtn_loc=config(H,temperature)
 
-            configs_logprob.append(logprob)
+            # configs_logprob.append(logprob)
             configs_scores.append(wtn_score)
             configs_locs.append(wtn_loc)
 
@@ -311,7 +323,6 @@ class LatentSpace2(keras.layers.Layer):
         for sp_layer in self.sp_dense_layers:
             H=sp_layer(H)
         #Now we will not pass it through sigmoid since we are normalizin ltr
-        H=tf.nn.sigmoid(H)
         base_score=tf.reduce_mean(H)
 
         #Adding this acore and loc to our list

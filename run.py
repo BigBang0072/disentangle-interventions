@@ -159,7 +159,7 @@ if __name__=="__main__":
 
     #Variables for tensorboard summary
     trainer_config["rnum"]="6.temp"
-    trainer_config["smry_path"]="temp/{}/{}/".format(graph_name,
+    trainer_config["smry_path"]="temp/dense/{}/{}/".format(graph_name,
                                                     trainer_config["rnum"])
 
     #Calling the trainer
