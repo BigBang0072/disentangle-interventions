@@ -134,6 +134,7 @@ if __name__=="__main__":
                     [100,"relu"]
                 ]
     sp_dense_config=[
+                    [100,"relu"]
                 ]
     sp_dense_config_base=[
                 ]

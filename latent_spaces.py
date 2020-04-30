@@ -69,6 +69,7 @@ class LatentConfig2(keras.layers.Layer):
             couts_logprob_temp=couts_logprob/temperature
         couts_temp=tf.nn.softmax(couts_logprob_temp,axis=1)
         couts_temp=tf.reduce_mean(couts_temp,axis=0)
+        print("Node_Heat:",couts_temp)
 
         #Now we will ready our score generation branch
         couts_logprob_mean=tf.reduce_mean(couts_logprob,axis=0)
@@ -192,7 +193,7 @@ class LatentSlot2(keras.layers.Layer):
         #Now let's initialize the all the differnet config (1---N)
         self.num_configs=len(coef_config)-1
         self.latent_configs=[]
-        for cidx in range(self.num_configs):
+        for cidx in [1]:#range(self.num_configs):
             config=LatentConfig2(order_interv=cidx+1,
                                 soften=soften,
                                 sample_strategy=sample_strategy,
