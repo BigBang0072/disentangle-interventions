@@ -244,7 +244,7 @@ class Decoder(keras.layers.Layer):
         no_interv_idx=len(self.coef_config)-1
         if phi>0:
             total_count+=1
-            if ([no_interv_idx],[0]) in interv_locs:
+            if ((no_interv_idx,),(0,)) in interv_locs:
                 presence_count+=1
         #Now we are ready to calculate the recall
         recall=presence_count/total_count

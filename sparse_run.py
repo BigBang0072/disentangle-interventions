@@ -59,7 +59,7 @@ def trainer(trainer_config):
                 sample_strategy=trainer_config["sample_strategy"],
                 cutoff_config=trainer_config["cutoff_config"],
                 oracle=oracle,
-                )
+                do_config=trainer_config["do_config"])
     #Creating our optimizer
     optimizer=tf.keras.optimizers.Adam(trainer_config["learning_rate"],
                                     decay=trainer_config["decay_rate"])
@@ -83,7 +83,7 @@ def trainer(trainer_config):
 
     #Starting to enumerate over the dataset
     losses=[]
-    doRecalls=[]
+    doRecalls_I=[]
     doMAEs=[]
     print("Starting the training steps:")
     for step,X in enumerate(dataset):
@@ -99,18 +99,21 @@ def trainer(trainer_config):
             tf.summary.scalar("lr",lr,step=int(model.global_step.value()))
 
         #Getting the metrics from the model
-        # doRecall=float(model.metrics[0].result())
-        # doRecalls.append(doRecall)
-        # doMAE=float(model.metrics[1].result())
-        # doMAEs.append(doMAE)
-        # model.reset_metrics()
+        doRecall_I=float(model.metrics[0].result())
+        doRecalls_I.append(doRecall_I)
+
+        doRecall_S=float(model.metrics[1].result())
+
+        doMAE=float(model.metrics[2].result())
+        doMAEs.append(doMAE)
+        model.reset_metrics()
         # pdb.set_trace()
 
         #Printing ocassionally
         if step%trainer_config["verbose"]==0:
             print(
-            "step:{0:} loss:{1:0.5f}\n\n".
-                                    format(step,loss))
+            "step:{0:} loss:{1:0.5f} recall@I:{2:0.5f} recall@S:{3:0.5f} mae:{4:0.5f}\n\n".
+                                    format(step,loss,doRecall_I,doRecall_S,doMAE))
 
         #Stop after certain number of epochs
         # if step>=trainer_config["epochs"]:
@@ -152,7 +155,7 @@ if __name__=="__main__":
     trainer_config["dense_config"]=dense_config
     trainer_config["sp_dense_config"]=sp_dense_config
     trainer_config["sp_dense_config_base"]=sp_dense_config_base
-    trainer_config["sparsity_factor"]=6
+    trainer_config["sparsity_factor"]=5
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
     trainer_config["verbose"]=1
