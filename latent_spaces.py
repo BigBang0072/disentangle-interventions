@@ -193,7 +193,7 @@ class LatentSlot2(keras.layers.Layer):
         #Now let's initialize the all the differnet config (1---N)
         self.num_configs=len(coef_config)-1
         self.latent_configs=[]
-        for cidx in [1]:#range(self.num_configs):
+        for cidx in [0]:#range(self.num_configs):
             config=LatentConfig2(order_interv=cidx+1,
                                 soften=soften,
                                 sample_strategy=sample_strategy,

@@ -111,8 +111,7 @@ class Decoder(keras.layers.Layer):
         return sample_logprob
 
 
-    def _calculate_sample_likliehood(self,interv_loc_prob,sample_loc_prob,
-                                    tolerance=1e-10):
+    def _calculate_sample_likliehood(self,interv_loc_prob,sample_loc_prob,tolerance=1e-10):
         '''
         Given the probability of the interventions and the probability of
         samples in those interventions, this function will calulcate the
@@ -165,7 +164,8 @@ class Decoder(keras.layers.Layer):
 
         #Now we are ready to calculate recall@I
         num_present=0.0
-        for idx in range(int(num_I)):
+        max_len=min(len(ncp_list),int(num_I))
+        for idx in range(max_len):
             if ncp_list[idx][0:2] in do_config:
                 num_present+=1
         recall_at_I=num_present/num_I
@@ -175,7 +175,7 @@ class Decoder(keras.layers.Layer):
         for idx in range(len(ncp_list)):
             if ncp_list[idx][0:2] in do_config:
                 num_present+=1
-        recall_at_S=num_present/len(interv_loc) #We want to penalize split
+        recall_at_S=num_present/len(interv_locs) #We want to penalize split
 
         #Adding the result to tensorboard
         with self.smry_writer.as_default():
@@ -232,7 +232,7 @@ class Decoder(keras.layers.Layer):
                 adiff_pis.append(pi)
             #Writing individual contribution to tensorboard
             with self.smry_writer.as_default():
-                name="{}:{}".format(nodes_cats,adiff)
+                name="{}:{}".format(nodes_cats,pi)
                 tf.summary.scalar(name,adiff,
                                     step=int(self.global_step.value()))
         #Now we will calculate the average trend of MSE
