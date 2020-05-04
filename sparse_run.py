@@ -121,8 +121,19 @@ def trainer(trainer_config):
     return losses
 
 if __name__=="__main__":
+    import argparse
+    parser=argparse.ArgumentParser()
+    parser.add_argument("-gname",dest="graph_name")
+    parser.add_argument("-dsize",dest="sample_size",type=int)
+    parser.add_argument("-ssize",dest="shuffle_buffer",type=int)
+    parser.add_argument("-bsize",dest="batch_size",type=int)
+    parser.add_argument("-sfactor",dest="sparsity_factor",type=int)
+    parser.add_argument("-epochs",dest="epochs",type=int)
+    parser.add_argument("-rnum",dest="rnum")
+    args=parser.parse_args()
+
     #Setting up the parameters for the dataset
-    graph_name="asia"
+    graph_name=args.graph_name
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
                 ((2,),(0,),0.2),
@@ -146,20 +157,20 @@ if __name__=="__main__":
     trainer_config={}
     trainer_config["modelpath"]=modelpath
     trainer_config["do_config"]=do_config
-    trainer_config["sample_size"]=10000
+    trainer_config["sample_size"]=args.sample_size
     trainer_config["savepath"]=None
 
     #Training related parameters
-    trainer_config["shuffle_buffer"]=5000
-    trainer_config["batch_size"]=1000
+    trainer_config["shuffle_buffer"]=args.shuffle_buffer
+    trainer_config["batch_size"]=args.batch_size
     trainer_config["dense_config"]=dense_config
     trainer_config["sp_dense_config"]=sp_dense_config
     trainer_config["sp_dense_config_base"]=sp_dense_config_base
-    trainer_config["sparsity_factor"]=6
+    trainer_config["sparsity_factor"]=args.sparsity_factor
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
     trainer_config["verbose"]=1
-    trainer_config["epochs"]=20
+    trainer_config["epochs"]=args.epochs
 
     #Parameters for sampling from the latent space
     soften=True                                #for using temperature
@@ -176,7 +187,7 @@ if __name__=="__main__":
     trainer_config["cutoff_config"]=[tau_max,scale_factor]
 
     #Variables for tensorboard summary
-    trainer_config["rnum"]="1.1"
+    trainer_config["rnum"]=args.rnum
     trainer_config["smry_path"]="temp/sparse/{}/{}/".format(graph_name,
                                                     trainer_config["rnum"])
 

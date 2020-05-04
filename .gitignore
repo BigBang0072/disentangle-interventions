@@ -1,6 +1,6 @@
 temp
 *.pyc
-*.txt
 *.png
 *.DS_Store
 *.csv
+*.sh
