@@ -175,7 +175,7 @@ class Decoder(keras.layers.Layer):
         for idx in range(len(ncp_list)):
             if ncp_list[idx][0:2] in do_config:
                 num_present+=1
-        recall_at_S=num_present/len(interv_locs) #We want to penalize split
+        recall_at_S=num_present/num_I #We want to penalize split
 
         #Adding the result to tensorboard
         with self.smry_writer.as_default():

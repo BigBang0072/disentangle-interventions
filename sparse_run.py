@@ -136,10 +136,10 @@ if __name__=="__main__":
     graph_name=args.graph_name
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
-                ((2,),(0,),0.2),
-                ((6,),(1,),0.3),
-                ((7,),(0,),0.3),
-                ((5,),(1,),0.2)
+                ((2,0),(0,1),0.2),
+                ((6,3),(1,1),0.3),
+                ((7,4),(0,0),0.3),
+                ((5,1),(1,0),0.2)
             ]
 
     #Deciding the configuration of the encoder
@@ -175,9 +175,11 @@ if __name__=="__main__":
     #Parameters for sampling from the latent space
     soften=True                                #for using temperature
     trainer_config["sample_strategy"]="gumbel"   #top-k or gumbel
-    init_temp=1000
+    init_temp=1024
     temp_decay_rate=0.5
-    temp_decay_step=10          #sample_size/batch_size = num steps per epoch
+    #num step per epoch,so in (1/2)^10 = 1024
+    temp_delay=(args.epoch/10.0)*0.5        #after half of all epoch we chill
+    temp_decay_step=temp_delay*(args.sample_size*1.0/args.batch_size)
     trainer_config["temp_config"]=[soften,init_temp,
                                     temp_decay_rate,temp_decay_step]
 
