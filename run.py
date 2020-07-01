@@ -119,10 +119,10 @@ if __name__=="__main__":
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     do_config=[
-                ((2,),(0,),0.2),
-                ((6,),(1,),0.3),
+                ((0,),(0,),0.2),
+                ((0,),(1,),0.3),
                 ((7,),(0,),0.3),
-                ((5,),(1,),0.2)
+                ((7,),(1,),0.2)
             ]
 
     #Deciding the configuration of the encoder
@@ -142,15 +142,15 @@ if __name__=="__main__":
     trainer_config["shuffle_buffer"]=5000
     trainer_config["batch_size"]=1000
     trainer_config["dense_config"]=dense_config
-    trainer_config["sparsity_factor"]=6
+    trainer_config["sparsity_factor"]=17
     trainer_config["learning_rate"]=1e-3
     trainer_config["decay_rate"]=1e-4
     trainer_config["verbose"]=5
     trainer_config["epochs"]=20
 
     #Parameters for sampling from the latent space
-    soften=True                                #for using temperature
-    trainer_config["sample_strategy"]="gumbel"   #top-k or gumbel
+    soften=False                                #for using temperature
+    trainer_config["sample_strategy"]="top-k"   #top-k or gumbel
     init_temp=1000
     temp_decay_rate=0.5
     temp_decay_step=10          #sample_size/batch_size = num steps per epoch
@@ -158,8 +158,8 @@ if __name__=="__main__":
                                     temp_decay_rate,temp_decay_step]
 
     #Variables for tensorboard summary
-    trainer_config["rnum"]="6.temp"
-    trainer_config["smry_path"]="temp/dense/{}/{}/".format(graph_name,
+    trainer_config["rnum"]="p2.3.2"
+    trainer_config["smry_path"]="temp/dense/{}/new/{}/".format(graph_name,
                                                     trainer_config["rnum"])
 
     #Calling the trainer

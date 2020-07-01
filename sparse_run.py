@@ -178,7 +178,7 @@ if __name__=="__main__":
     init_temp=1024
     temp_decay_rate=0.5
     #num step per epoch,so in (1/2)^10 = 1024
-    temp_delay=(args.epoch/10.0)*0.5        #after half of all epoch we chill
+    temp_delay=(args.epochs/10.0)*0.5        #after half of all epoch we chill
     temp_decay_step=temp_delay*(args.sample_size*1.0/args.batch_size)
     trainer_config["temp_config"]=[soften,init_temp,
                                     temp_decay_rate,temp_decay_step]
