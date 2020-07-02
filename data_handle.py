@@ -274,7 +274,7 @@ class BnNetwork():
                 sample=child_samples.iloc[idx]
                 sample_prob=[]
                 for graph in interv_graphs:
-                    prob=_get_graph_sample_probability(graph,
+                    prob=get_graph_sample_probability(graph,
                                                     sample,network_parameters)
                     sample_prob.append(prob)
                 all_sample_prob.append(sample_prob)
@@ -328,7 +328,8 @@ class BnNetwork():
 
 #Helper function to be used by parallel worker to compute probability of
 #individual sample
-def _get_graph_sample_probability(graph,sample,network_parameters):
+def get_graph_sample_probability(graph,sample,network_parameters,
+                                    marginal=False):
     '''
     This function will calcuate the probability of a sample in a graph,
     which will be later used to calcuate the overall mixture probability.
@@ -362,8 +363,13 @@ def _get_graph_sample_probability(graph,sample,network_parameters):
         return ridx
 
     #Now we will start in the topological order to get prob
+    marginal_length=len(topo_i2n)
+    if marginal==True:
+        marginal_length=len(sample)
+        
+    #Initialing the porbabilty
     overall_prob=1.0
-    for nidx in range(len(topo_i2n)):
+    for nidx in range(marginal_length):
         #Getting the information of node
         node=topo_i2n[nidx]
         node_cpd=graph.get_cpds(node)
@@ -445,7 +451,7 @@ if __name__=="__main__":
     # pdb.set_trace()
 
     #Testing the probability calculation function
-    prob=network._get_graph_sample_probability(network.base_graph,
+    prob=network.get_graph_sample_probability(network.base_graph,
                                                 samples.iloc[0])
     # pdb.set_trace()
 
