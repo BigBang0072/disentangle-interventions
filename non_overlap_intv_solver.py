@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.optimize import minimize
+import pdb
 
-from data_handling import BnNetwork,get_graph_sample_probability
+from data_handle import BnNetwork,get_graph_sample_probability
 
 
 class DistributionHandler():
@@ -37,13 +38,20 @@ class DistributionHandler():
         true_comp_graphs=[]
 
         #Now we will create the individual graph one by one
+        pi_sum=0.0
         for node_ids,cat_ids,pi in self.do_config:
+            pi_sum+=pi
             #Getting the intervented distribution
             do_graph=self.base_network.do(node_ids,cat_ids)
 
             #Keeping them safe for later use
             true_comp_graphs.append(do_graph)
             true_comp_pis.append(pi)
+
+        #If the base distribution also contributes
+        if 1-pi_sum>0:
+            true_comp_pis.append(1-pi_sum)
+            true_comp_graphs.append(self.base_network.base_graph)
 
         self.true_comp_pis=true_comp_pis
         self.true_comp_graphs=true_comp_graphs
@@ -62,7 +70,7 @@ class DistributionHandler():
 
         sample_prob=0.0
         #Now we will iterate over all the individual component
-        for comp_pi,comp_graph in zip(true_comp_pis,true_comp_graphs):
+        for comp_pi,comp_graph in zip(self.true_comp_pis,self.true_comp_graphs):
             #Getting the sample probability in the interv graph
             comp_prob=get_graph_sample_probability(comp_graph,sample,
                                                     network_parameters,
@@ -131,6 +139,7 @@ class NonOverlapIntvSolve():
 
         #Creating the distibution handler
         self.dist_handler=DistributionHandler(base_network,do_config)
+        self.solve()
 
     def solve(self,):
         '''
@@ -139,14 +148,16 @@ class NonOverlapIntvSolve():
         '''
         #initialize the x_bar to be used for eliminating the variables
         x_bars={
-                "all"={},
+                "all":{},
                 }
         #Initializing the dictionary to hold the component configuration
         comp_dict={}
 
         #Lets start iterating over all the variables
         for nidx in range(len(self.base_network.topo_i2n)):
+            print("Starting Step-1 for Node:{}".format(nidx))
             #Step 1: Get the category which appear as new components
+            self._get_new_components(comp_dict,x_bars,nidx)
 
 
     def _get_new_components(self,comp_dict,x_bars,nidx):
@@ -157,7 +168,7 @@ class NonOverlapIntvSolve():
         '''
         #First of all we will have to generate the system of equations
         node_id=self.base_network.topo_i2n[nidx]
-        num_cats=len(self.base_network.card_node[node_id])
+        num_cats=self.base_network.card_node[node_id]
         #Initializing the system matrix
         A=np.zeros((num_cats,num_cats),dtype=np.float32)
         b=np.zeros((num_cats,),dtype=np.float32)
@@ -177,6 +188,7 @@ class NonOverlapIntvSolve():
             x_left=x_bars["all"].copy()
             p_left=self.dist_handler.get_intervention_probability(x_left,
                                                     eval_do=None)
+            print("pmix:{}\t pbase:{}\t pleft:{}".format(p_mix,p_base,p_left))
 
             #Now we will fill up the rows of the system matix
             A[cidx,:]=(-1*p_base)
@@ -184,26 +196,47 @@ class NonOverlapIntvSolve():
 
             #Now we will fill the entry in the b-vector
             old_pis=[pi for nodes,cats,pi in comp_dict.values()]
-            b[cidx]=p_mix+(1-sum(old_pis))*p_base
+            b[cidx]=p_mix-(1-sum(old_pis))*p_base
 
         #Now we are ready with the system of equation, we have to solve it
         #Setting up the optimization objective
-        def optimization_func(x,A,b):
+        def optimization_func(x,):
             residual=np.sum((np.matmul(A,x)-b)**2)  #TODO
+            print("residual:",residual)
             return residual
 
         #Setting up the constraints
         bounds=[(0.0,1.0)]*num_cats
-        sum_constraints=[{"type":"ineq"},"fun":lambda x:1-np.sum(x)]
-        zero_constraints=[{"type":"ineq"},
+        sum_constraints=[{"type":"ineq",
+                        "fun":lambda x:1-np.sum(x)-sum(old_pis)}]
+        zero_constraints=[{"type":"ineq",
                         "fun":lambda x: self.opt_eps-np.min(x)}]
 
         #Making the initial guess : #TODO
-        pi_0=np.zeros((cidx,),dtype=np.float32)
+        pi_0=np.zeros((num_cats,),dtype=np.float32)+[0.2,0.99]
         opt_result=minimize(optimization_func,pi_0,
                             method="SLSQP",
                             bounds=bounds,
-                            constraints=sum_constraints+zero_constraints)
+                            constraints=zero_constraints+sum_constraints)
 
         #Now we will have to prune the least values guy as impossible node
-        
+        print(opt_result)
+        pdb.set_trace()
+
+
+if __name__=="__main__":
+    #Initializing the graph
+    graph_name="asia"
+    modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
+    base_network=BnNetwork(modelpath)
+
+    #Creating artificial intervention
+    do_config=[
+                ((0,),(1,),0.8),
+            ]
+
+    #Initializing our Solver
+    solver=NonOverlapIntvSolve(base_network=base_network,
+                                do_config=do_config,
+                                infinte_mix_sample=True,
+                                opt_eps=1e-10)

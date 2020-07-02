@@ -328,8 +328,7 @@ class BnNetwork():
 
 #Helper function to be used by parallel worker to compute probability of
 #individual sample
-def get_graph_sample_probability(graph,sample,network_parameters,
-                                    marginal=False):
+def get_graph_sample_probability(graph,sample,network_parameters,marginal=False):
     '''
     This function will calcuate the probability of a sample in a graph,
     which will be later used to calcuate the overall mixture probability.
@@ -366,7 +365,7 @@ def get_graph_sample_probability(graph,sample,network_parameters,
     marginal_length=len(topo_i2n)
     if marginal==True:
         marginal_length=len(sample)
-        
+
     #Initialing the porbabilty
     overall_prob=1.0
     for nidx in range(marginal_length):
