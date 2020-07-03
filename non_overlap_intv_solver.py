@@ -131,11 +131,14 @@ class NonOverlapIntvSolve():
     base_network=None       #The BnNetwork class instance of current porblem
     do_config=None          #The configuration of the true mixture
 
-    def __init__(self,base_network,do_config,infinte_mix_sample,opt_eps):
+    def __init__(self,base_network,do_config,infinte_mix_sample,
+                    opt_eps,zero_eps):
         self.base_network=base_network
         self.do_config=do_config
         self.infinte_mix_sample=infinte_mix_sample
-        self.opt_eps=opt_eps
+        self.opt_eps=opt_eps            #Threshold for zeroing one cat in optim
+        self.zero_eps=zero_eps          #Threshold for new comp creation
+        self.insert_eps=insert_eps      #threshold in error while insert to new
 
         #Creating the distibution handler
         self.dist_handler=DistributionHandler(base_network,do_config)
@@ -145,11 +148,21 @@ class NonOverlapIntvSolve():
         '''
         This function will get the estimate of all the mixing coefficient
         along with mixing coefficient.
+
+        Important Running Variables:
+        x_bars      : dict containing all the nodes and its left out cats
+                        upto that point of interation.
+                        {
+                        node_name : node_category_blacklisted
+                        }
+
+        comp_dict   : list of all the component
+                        {
+                        comp_name: [[nodes],[cats],pi]
+                        }
         '''
         #initialize the x_bar to be used for eliminating the variables
-        x_bars={
-                "all":{},
-                }
+        x_bars={}
         #Initializing the dictionary to hold the component configuration
         comp_dict={}
 
@@ -157,10 +170,21 @@ class NonOverlapIntvSolve():
         for nidx in range(len(self.base_network.topo_i2n)):
             print("Starting Step-1 for Node:{}".format(nidx))
             #Step 1: Get the category which appear as new components
-            self._get_new_components(comp_dict,x_bars,nidx)
+            zero_cat_list,new_comp_dict=self._insert_as_new_components(
+                                                comp_dict,x_bars,nidx)
+            # pdb.set_trace()
+            #Only insert the remaining category except 1.
+            print("Starting Step-2 for Node:{}".format(nidx))
+            left_cidx=self._insert_in_old_component(
+                        comp_dict,new_comp_dict,x_bars,nidx,zero_cat_list)
+
+            #Now we have to update our component list
+            comp_dict.update(new_comp_dict)
+
+        return comp_dict,x_bars
 
 
-    def _get_new_components(self,comp_dict,x_bars,nidx):
+    def _insert_as_new_components(self,comp_dict,x_bars,nidx):
         '''
         This function will give us the category of this current node, nidx
         which will give us a new compoenent instead of getting assimilated
@@ -175,7 +199,7 @@ class NonOverlapIntvSolve():
 
         for cidx in range(num_cats):
             #Get the marginal-point to evaluate on
-            x_eval=x_bars["all"].copy()
+            x_eval=x_bars.copy()
             x_eval[node_id]=cidx
 
             #Get the mixture probability on this point
@@ -185,10 +209,11 @@ class NonOverlapIntvSolve():
             p_base=self.dist_handler.get_intervention_probability(x_eval,
                                                     eval_do=None)
             #Get the porb dist when the interv matches
-            x_left=x_bars["all"].copy()
+            x_left=x_bars.copy()
             p_left=self.dist_handler.get_intervention_probability(x_left,
                                                     eval_do=None)
-            print("pmix:{}\t pbase:{}\t pleft:{}".format(p_mix,p_base,p_left))
+            #print("pmix:{}\t pbase:{}\t pleft:{}".format(
+                                #               p_mix,p_base,p_left))
 
             #Now we will fill up the rows of the system matix
             A[cidx,:]=(-1*p_base)
@@ -213,7 +238,7 @@ class NonOverlapIntvSolve():
                         "fun":lambda x: self.opt_eps-np.min(x)}]
 
         #Making the initial guess : #TODO
-        pi_0=np.zeros((num_cats,),dtype=np.float32)+[0.2,0.99]
+        pi_0=np.zeros((num_cats,),dtype=np.float32)
         opt_result=minimize(optimization_func,pi_0,
                             method="SLSQP",
                             bounds=bounds,
@@ -221,7 +246,109 @@ class NonOverlapIntvSolve():
 
         #Now we will have to prune the least values guy as impossible node
         print(opt_result)
-        pdb.set_trace()
+        # pdb.set_trace()
+
+        #Now we will create the new component for the guys with sig. pi
+        zero_cat_list=[]
+        new_comp_dict={}
+        for cidx in range(num_cats):
+            cat_pi=opt_result.x[cidx]
+            #Now if this pi is significant then we will create new comp
+            if cat_pi>self.zero_eps:
+                new_comp=[[nidx,],[cidx,],cat_pi]
+                new_comp_dict[
+                    "c-{}".format(len(comp_dict)+len(new_comp_dict))]=new_comp
+            else:
+                #Categories which will be the candidate for insertion in old
+                zero_cat_list.append(cidx)
+
+        return zero_cat_list,new_comp_dict
+
+    def _insert_in_old_component(self,comp_dict,new_comp_dict,
+                                    x_bars,nidx,zero_cat_list):
+        '''
+        This function will try to insert the left over categories of this node
+        into already existing components. Here we will
+        1. see the compatibility of the category in all the component
+        2. Assign the cat to old component only when they pass:
+            2.1 |p_mix-p_test| <= eps-3
+            2.2 And minimal among available candidate for insertion
+        '''
+        node_id=self.base_network.topo_i2n[nidx]
+        num_cats=self.base_network.card_node[node_id]
+
+        #Getting the pi's alrady discovered
+        old_pis=[pi for _,_,pi in comp_dict.values()]
+        new_pis=[pi for _,_,pi in new_comp_dict.values()]
+
+        def get_x_rest(nidx,cname,comp_dict,x_bars):
+            x_rest={}
+            #Getting the nodes present in the current component
+            curr_nodes,curr_cats,_=comp_dict[cname]
+
+            #Iterating over nodes less than current
+            for tnidx in range(0,nidx):
+                tnidx_name=self.base_network.topo_i2n[tnidx]
+
+                #The the idx is  in current component then use as its is
+                if tnidx in curr_nodes:
+                    cidx=[curr_cats[idx] for idx range(len(curr_nodes))
+                                            if curr_nodes[idx]==tnidx]
+                    assert len(cidx)==1,"Mistake in Component"
+                    x_rest[tnidx_name]=cidx[0]
+                else:
+                    x_rest[tnidx_name]=x_bars[tnidx_name]
+            return x_rest
+
+        #iterate over the already existing components and see who could go in
+        candidate_insert_list=[]
+        for cname,cnode_ids,ccat_ids,cpi in comp_dict.items():
+            #First of all we have to generate the x_rest list
+            x_rest=get_x_rest(nidx,cname,comp_dict,x_bars)
+
+            #we will test the fitness of all the zero cat in this comp
+            for zcidx in zero_cat_list:
+                #Getting the mixture distribution probability
+                x_full=x_rest.copy()
+                x_full[node_id]=zcidx
+                pmix_full=self.dist_handler.get_mixture_probability(
+                                            x_full,self.infinte_mix_sample)
+
+                #Now we have to generate the test probability
+                pbase_full=self.dist_handler.get_intervention_probability(
+                                                    x_full,eval_do=None)
+                pcomp_left=self.dist_handler.get_intervention_probability(
+                                                x_rest,
+                                                eval_do=[cnode_ids,ccat_ids])
+                #Finally getting the p_test
+                ptest_full=(1-sum(old_pis+new_pis))*pbase_full\
+                            +cpi*pcomp_left
+
+                #Now we will see if we are equal within some slackness
+                test_error=abs(pbase_full-ptest_full)
+                if test_error<self.insert_eps:
+                    candidate_insert_list.append([cname,zcidx,test_error])
+
+        #Now we have to choose from candidate to insert based on least error
+        candidate_insert_list.sort(key=lambda x:x[-1])
+        inserted_cats=[]
+        for cname,cidx,test_error in candidate_insert_list:
+            #If we are just left with one category (which must not be here)
+            if len(inserted_cats)==(len(zero_cat_list)-1):
+                break
+            #Other wise if the category is not inserted we will do it
+            if cidx not in inserted_cats:
+                print("nidx:{}\t cidx:{}\t inserted in:{} with error:{}"
+                        .format(nidx,cidx,cname,test_error))
+                comp_dict[cname][0].append(nidx)
+                comp_dict[cname][1].append(cidx)
+
+        #Now its time to blacklist one of the category of this node
+        #TODO:could be done smartly by looking at large prob to remove error
+        left_cidx=list(set(zero_cat_list)-set(inserted_cats))
+        x_bars[node_id]=left_cidx[-1]
+        print("Left cidx:{} for node:{}".format(left_cidx[-1],nidx))
+        return left_cidx[-1]
 
 
 if __name__=="__main__":
@@ -229,14 +356,24 @@ if __name__=="__main__":
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     base_network=BnNetwork(modelpath)
+    asia_cpd=base_network.base_graph.get_cpds("asia")
+    from pgmpy.factors.discrete import TabularCPD
+    new_cpd=TabularCPD("asia",
+                        2,
+                        np.array([[0.10],[0.90]]))
+    base_network.base_graph.remove_cpds(asia_cpd)
+    base_network.base_graph.add_cpds(new_cpd)
+
+
 
     #Creating artificial intervention
     do_config=[
-                ((0,),(1,),0.8),
+                ((0,),(1,),0.7),
             ]
 
     #Initializing our Solver
     solver=NonOverlapIntvSolve(base_network=base_network,
                                 do_config=do_config,
                                 infinte_mix_sample=True,
-                                opt_eps=1e-10)
+                                opt_eps=1e-10,
+                                zero_eps=1e-10)
