@@ -186,7 +186,6 @@ class NonOverlapIntvSolve():
 
         return comp_dict,x_bars
 
-
     def _insert_as_new_components(self,comp_dict,x_bars,nidx):
         '''
         This function will give us the category of this current node, nidx
@@ -229,7 +228,7 @@ class NonOverlapIntvSolve():
         #Now we are ready with the system of equation, we have to solve it
         #Setting up the optimization objective
         def optimization_func(x,):
-            residual=np.sum((np.matmul(A,x)-b)**2)*1000  #TODO
+            residual=np.sum((np.matmul(A,x)-b)**2)*1000000  #TODO
             print("residual:",residual)
             return residual
 
@@ -328,7 +327,7 @@ class NonOverlapIntvSolve():
                             +cpi*pcomp_left
 
                 #Now we will see if we are equal within some slackness
-                test_error=abs(pmix_full-ptest_full)
+                test_error=(abs(pmix_full-ptest_full)/pmix_full)*100
                 if test_error<self.insert_eps:
                     candidate_insert_list.append([cname,zcidx,test_error])
 
@@ -387,8 +386,11 @@ if __name__=="__main__":
 
     #Creating artificial intervention
     do_config=[
-                ((0,1,7),(1,0,1),0.3),
-                ((2,3),(0,1),0.2),
+                ((0,7),(1,1),0.1),
+                ((1,),(1,),0.1),
+                ((2,3,6),(1,0,1),0.1),
+                ((4,),(1,),0.1),
+                ((5,),(1,),0.1),
             ]
 
     #Initializing our Solver
@@ -397,4 +399,4 @@ if __name__=="__main__":
                                 infinte_mix_sample=True,
                                 opt_eps=1e-10,
                                 zero_eps=1e-5,
-                                insert_eps=1e-5)
+                                insert_eps=0.05)#This is in percentage error
