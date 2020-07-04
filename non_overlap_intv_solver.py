@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import minimize
 import pdb
+from pprint import pprint
 
 from data_handle import BnNetwork,get_graph_sample_probability
 
@@ -132,7 +133,7 @@ class NonOverlapIntvSolve():
     do_config=None          #The configuration of the true mixture
 
     def __init__(self,base_network,do_config,infinte_mix_sample,
-                    opt_eps,zero_eps):
+                    opt_eps,zero_eps,insert_eps):
         self.base_network=base_network
         self.do_config=do_config
         self.infinte_mix_sample=infinte_mix_sample
@@ -180,6 +181,8 @@ class NonOverlapIntvSolve():
 
             #Now we have to update our component list
             comp_dict.update(new_comp_dict)
+            pprint(comp_dict)
+            pprint(x_bars)
 
         return comp_dict,x_bars
 
@@ -212,8 +215,8 @@ class NonOverlapIntvSolve():
             x_left=x_bars.copy()
             p_left=self.dist_handler.get_intervention_probability(x_left,
                                                     eval_do=None)
-            #print("pmix:{}\t pbase:{}\t pleft:{}".format(
-                                #               p_mix,p_base,p_left))
+            print("pmix:{}\t pbase:{}\t pleft:{}".format(
+                                              p_mix,p_base,p_left))
 
             #Now we will fill up the rows of the system matix
             A[cidx,:]=(-1*p_base)
@@ -226,7 +229,7 @@ class NonOverlapIntvSolve():
         #Now we are ready with the system of equation, we have to solve it
         #Setting up the optimization objective
         def optimization_func(x,):
-            residual=np.sum((np.matmul(A,x)-b)**2)  #TODO
+            residual=np.sum((np.matmul(A,x)-b)**2)*1000  #TODO
             print("residual:",residual)
             return residual
 
@@ -262,6 +265,7 @@ class NonOverlapIntvSolve():
                 #Categories which will be the candidate for insertion in old
                 zero_cat_list.append(cidx)
 
+        # pdb.set_trace()
         return zero_cat_list,new_comp_dict
 
     def _insert_in_old_component(self,comp_dict,new_comp_dict,
@@ -292,7 +296,7 @@ class NonOverlapIntvSolve():
 
                 #The the idx is  in current component then use as its is
                 if tnidx in curr_nodes:
-                    cidx=[curr_cats[idx] for idx range(len(curr_nodes))
+                    cidx=[curr_cats[idx] for idx in range(len(curr_nodes))
                                             if curr_nodes[idx]==tnidx]
                     assert len(cidx)==1,"Mistake in Component"
                     x_rest[tnidx_name]=cidx[0]
@@ -302,7 +306,7 @@ class NonOverlapIntvSolve():
 
         #iterate over the already existing components and see who could go in
         candidate_insert_list=[]
-        for cname,cnode_ids,ccat_ids,cpi in comp_dict.items():
+        for cname,(cnode_ids,ccat_ids,cpi) in comp_dict.items():
             #First of all we have to generate the x_rest list
             x_rest=get_x_rest(nidx,cname,comp_dict,x_bars)
 
@@ -325,9 +329,11 @@ class NonOverlapIntvSolve():
                             +cpi*pcomp_left
 
                 #Now we will see if we are equal within some slackness
-                test_error=abs(pbase_full-ptest_full)
+                test_error=abs(pmix_full-ptest_full)
                 if test_error<self.insert_eps:
                     candidate_insert_list.append([cname,zcidx,test_error])
+
+                # pdb.set_trace()
 
         #Now we have to choose from candidate to insert based on least error
         candidate_insert_list.sort(key=lambda x:x[-1])
@@ -337,17 +343,22 @@ class NonOverlapIntvSolve():
             if len(inserted_cats)==(len(zero_cat_list)-1):
                 break
             #Other wise if the category is not inserted we will do it
-            if cidx not in inserted_cats:
+            if cidx not in inserted_cats and nidx not in comp_dict[cname][0]:
                 print("nidx:{}\t cidx:{}\t inserted in:{} with error:{}"
                         .format(nidx,cidx,cname,test_error))
                 comp_dict[cname][0].append(nidx)
                 comp_dict[cname][1].append(cidx)
+
+                #Saying this node is already inserted
+                inserted_cats.append(cidx)
 
         #Now its time to blacklist one of the category of this node
         #TODO:could be done smartly by looking at large prob to remove error
         left_cidx=list(set(zero_cat_list)-set(inserted_cats))
         x_bars[node_id]=left_cidx[-1]
         print("Left cidx:{} for node:{}".format(left_cidx[-1],nidx))
+
+        # pdb.set_trace()
         return left_cidx[-1]
 
 
@@ -368,7 +379,8 @@ if __name__=="__main__":
 
     #Creating artificial intervention
     do_config=[
-                ((0,),(1,),0.7),
+                ((0,1),(1,0),0.5),
+                ((2,),(1,),0.4),
             ]
 
     #Initializing our Solver
@@ -376,4 +388,5 @@ if __name__=="__main__":
                                 do_config=do_config,
                                 infinte_mix_sample=True,
                                 opt_eps=1e-10,
-                                zero_eps=1e-10)
+                                zero_eps=1e-5,
+                                insert_eps=1e-5)
