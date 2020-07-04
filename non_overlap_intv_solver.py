@@ -268,8 +268,7 @@ class NonOverlapIntvSolve():
         # pdb.set_trace()
         return zero_cat_list,new_comp_dict
 
-    def _insert_in_old_component(self,comp_dict,new_comp_dict,
-                                    x_bars,nidx,zero_cat_list):
+    def _insert_in_old_component(self,comp_dict,new_comp_dict,x_bars,nidx,zero_cat_list):
         '''
         This function will try to insert the left over categories of this node
         into already existing components. Here we will
@@ -367,20 +366,29 @@ if __name__=="__main__":
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     base_network=BnNetwork(modelpath)
+
+    #Tweaking of the CPDs
+    #Skewed Asia CPD
     asia_cpd=base_network.base_graph.get_cpds("asia")
     from pgmpy.factors.discrete import TabularCPD
-    new_cpd=TabularCPD("asia",
+    new_asia_cpd=TabularCPD("asia",
                         2,
                         np.array([[0.10],[0.90]]))
     base_network.base_graph.remove_cpds(asia_cpd)
-    base_network.base_graph.add_cpds(new_cpd)
+    base_network.base_graph.add_cpds(new_asia_cpd)
+
+    #Zero entry in the either CPD
+    new_either_cpd=np.array([[[0.95,0.95],[0.95,0.05]],
+                            [[0.05,0.05],[0.05,0.95]]])
+    base_network.base_graph.get_cpds("either").values=new_either_cpd
+    # pdb.set_trace()
 
 
 
     #Creating artificial intervention
     do_config=[
-                ((0,1),(1,0),0.5),
-                ((2,),(1,),0.4),
+                ((0,1,7),(1,0,1),0.3),
+                ((2,3),(0,1),0.2),
             ]
 
     #Initializing our Solver
