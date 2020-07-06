@@ -169,6 +169,7 @@ class NonOverlapIntvSolve():
 
         #Lets start iterating over all the variables
         for nidx in range(len(self.base_network.topo_i2n)):
+            print("\n\n###############################################")
             print("Starting Step-1 for Node:{}".format(nidx))
             #Step 1: Get the category which appear as new components
             zero_cat_list,new_comp_dict=self._insert_as_new_components(
@@ -199,6 +200,10 @@ class NonOverlapIntvSolve():
         A=np.zeros((num_cats,num_cats),dtype=np.float32)
         b=np.zeros((num_cats,),dtype=np.float32)
 
+        #Get the porb dist when the interv matches
+        x_left=x_bars.copy()
+        p_left=self.dist_handler.get_intervention_probability(x_left,
+                                                eval_do=None)
         for cidx in range(num_cats):
             #Get the marginal-point to evaluate on
             x_eval=x_bars.copy()
@@ -210,10 +215,7 @@ class NonOverlapIntvSolve():
             #Get the base dist prob on this eval point
             p_base=self.dist_handler.get_intervention_probability(x_eval,
                                                     eval_do=None)
-            #Get the porb dist when the interv matches
-            x_left=x_bars.copy()
-            p_left=self.dist_handler.get_intervention_probability(x_left,
-                                                    eval_do=None)
+
             print("pmix:{}\t pbase:{}\t pleft:{}".format(
                                               p_mix,p_base,p_left))
 
@@ -227,8 +229,14 @@ class NonOverlapIntvSolve():
 
         #Now we are ready with the system of equation, we have to solve it
         #Setting up the optimization objective
+        # order_b=np.floor(np.log10(np.abs(np.min(b))))
+        # if order_b<0:
+        #     order_b=order_b*(-1)
+        # scale_factor=10**order_b
+        scale_factor=10000
+
         def optimization_func(x,):
-            residual=np.sum((np.matmul(A,x)-b)**2)*1000000  #TODO
+            residual=np.sum((np.matmul(A,x)-b)**2)*scale_factor  #TODO
             print("residual:",residual)
             return residual
 
@@ -240,7 +248,10 @@ class NonOverlapIntvSolve():
                         "fun":lambda x: self.opt_eps-np.min(x)}]
 
         #Making the initial guess : #TODO
-        pi_0=np.zeros((num_cats,),dtype=np.float32)
+        # pi_0=np.zeros((num_cats,),dtype=np.float32)
+        pi_0=self._get_good_guess_of_pi(A,b,p_left)
+        print("Initial Guess:",pi_0)
+
         opt_result=minimize(optimization_func,pi_0,
                             method="SLSQP",
                             bounds=bounds,
@@ -266,6 +277,69 @@ class NonOverlapIntvSolve():
 
         # pdb.set_trace()
         return zero_cat_list,new_comp_dict
+
+    def _get_good_guess_of_pi(self,A,b,p_left):
+        '''
+        This function will get a better guess by solving the system of linear
+        equation by hand and and choosing the appropriate zeroing strategy
+        such that it's closest in the queare norm.
+
+        O(k^2) time will be spent over this.
+        '''
+        assert A[-1,0]!=0,"Ak : Last element should not be zero"
+        num_cats=b.shape[0]
+
+        #Get all the relavent p_bases
+        all_pbase=A[:,0]*(-1)
+        all_pbase[0,]+=p_left
+
+        #Finding the guy from which we will divide (largest for stability)
+        deno_guy=np.argmax(all_pbase)
+        deno_pbase=np.max(all_pbase)
+        deno_b=b[deno_guy]
+
+        #Calcuating the transformed b_value
+        b_trans=(b-(all_pbase/deno_pbase)*deno_b)/p_left
+
+
+        def solve_system_analytically(zero_guy):
+            #First of all we have to find x_deno
+            x_deno=None
+            if zero_guy==deno_guy:
+                x_deno=0.0
+            else:
+                x_deno=(-1*b_trans[zero_guy]*deno_pbase)/all_pbase[zero_guy]
+
+            #Now we will find all the other values
+            x_cand=np.zeros((num_cats,),dtype=np.float32)
+            for cidx in range(num_cats):
+                if cidx==zero_guy:
+                    x_cand[cidx]=0.0
+                elif cidx==deno_guy:
+                    x_cand[cidx]=x_deno
+                else:
+                    x_cand[cidx]=(all_pbase[cidx]/deno_pbase)*x_deno\
+                                    +b_trans[cidx]
+
+            return x_cand
+
+        #Now one by one we will try out the zeroing all categories
+        min_x_cand=None
+        min_error=10000000000000000.0
+        for cidx in range(num_cats):
+            x_cand=solve_system_analytically(cidx)
+
+            #Now first check we have to perform is positivity of all x
+            num_pos=np.sum(x_cand>=0.0)
+            if(num_pos<num_cats):
+                continue
+            #Now we will select only the one which give minimum residual
+            residual=np.sum(((np.matmul(A,x_cand)-b))**2)
+            if residual<min_error:
+                min_error=residual
+                min_x_cand=x_cand
+
+        return min_x_cand
 
     def _insert_in_old_component(self,comp_dict,new_comp_dict,x_bars,nidx,zero_cat_list):
         '''
@@ -386,11 +460,9 @@ if __name__=="__main__":
 
     #Creating artificial intervention
     do_config=[
-                ((0,7),(1,1),0.1),
-                ((1,),(1,),0.1),
-                ((2,3,6),(1,0,1),0.1),
-                ((4,),(1,),0.1),
-                ((5,),(1,),0.1),
+                ((0,4),(1,0),0.2),
+                ((1,2,6),(0,1,1),0.3),
+                ((5,),(0,),0.3)
             ]
 
     #Initializing our Solver
