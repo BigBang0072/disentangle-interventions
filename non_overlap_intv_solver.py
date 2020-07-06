@@ -427,7 +427,7 @@ class NonOverlapIntvSolve():
                 comp_dict[cname][0].append(nidx)
                 comp_dict[cname][1].append(cidx)
 
-                #Saying this node is already inserted
+                #Saying this node,category is already inserted
                 inserted_cats.append(cidx)
 
         #Now its time to blacklist one of the category of this node
@@ -539,12 +539,13 @@ def get_random_internvention_config(network):
             location[np.random.randint(0,num_cats)]=0
         _=np.random.randint(0,num_cats)
 
+        initial_num_comp=len(do_config)+1
         for cidx,choice in enumerate(location):
-            # print("Choice:",nidx,cidx,choice)
+            print("Choice:",nidx,cidx,choice)
             if choice==0:
                 #leave the guy
                 continue
-            elif choice==len(do_config)+1:
+            elif choice==initial_num_comp:
                 #Time for a new config
                 do_config.append([[nidx,],[cidx,]])
             else:
