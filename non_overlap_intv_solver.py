@@ -336,6 +336,7 @@ class NonOverlapIntvSolve():
             #Now we will select only the one which give minimum residual
             residual=np.sum(((np.matmul(A,x_cand)-b))**2)
             print("Residual:{}\nNew Guess:{}".format(residual,x_cand))
+            
             if residual<min_error:
                 min_error=residual
                 min_x_cand=x_cand
