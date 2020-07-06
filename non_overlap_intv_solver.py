@@ -335,6 +335,7 @@ class NonOverlapIntvSolve():
                 continue
             #Now we will select only the one which give minimum residual
             residual=np.sum(((np.matmul(A,x_cand)-b))**2)
+            print("Residual:{}\nNew Guess:{}".format(residual,x_cand))
             if residual<min_error:
                 min_error=residual
                 min_x_cand=x_cand
@@ -466,8 +467,8 @@ def redistribute_probability_mass(network,eps):
             mass_add_per_zero=eps/num_zeros
             add_vector=(col==0.0)*mass_add_per_zero
 
-            mass_sub_per_non_zero=eps/num_non_zero
-            sub_vector=(col!=0.0)*mass_sub_per_non_zero
+            #Getting the vector to subtract (in proportion to their mass)
+            sub_vector=col*eps
 
             #Now applying the redistribution
             new_col=col+add_vector-sub_vector
@@ -485,9 +486,12 @@ def redistribute_probability_mass(network,eps):
         print("new_cpd:\n",network.base_graph.get_cpds(node))
     return network
 
+#def get_random_internvention_config():
+
+
 if __name__=="__main__":
     #Initializing the graph
-    graph_name="asia"
+    graph_name="alarm"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     base_network=BnNetwork(modelpath)
 
@@ -497,12 +501,10 @@ if __name__=="__main__":
 
     #Creating artificial intervention
     do_config=[
-                ((0,),(1,),0.1),
+                ((0,4),(1,0),0.2),
                 ((1,),(1,),0.1),
-                ((2,),(1,),0.1),
-                ((3,),(1,),0.1),
-                ((4,),(1,),0.1),
-                ((5,),(1,),0.1),
+                ((2,6),(1,1),0.3),
+                ((5,),(0,),0.3)
             ]
 
     #Initializing our Solver
