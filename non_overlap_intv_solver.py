@@ -1,4 +1,8 @@
 import numpy as np
+from numpy.random import MT19937
+from numpy.random import RandomState, SeedSequence
+import time
+
 from scipy.optimize import minimize
 import pdb
 from pprint import pprint
@@ -336,7 +340,7 @@ class NonOverlapIntvSolve():
             #Now we will select only the one which give minimum residual
             residual=np.sum(((np.matmul(A,x_cand)-b))**2)
             print("Residual:{}\nNew Guess:{}".format(residual,x_cand))
-            
+
             if residual<min_error:
                 min_error=residual
                 min_x_cand=x_cand
@@ -487,7 +491,79 @@ def redistribute_probability_mass(network,eps):
         print("new_cpd:\n",network.base_graph.get_cpds(node))
     return network
 
-#def get_random_internvention_config():
+def get_random_internvention_config(network):
+    '''
+    This function will generate a random intervention to test our algo
+    '''
+    do_config=[]
+
+    #Now we will start from node to node to create component
+    for nidx in range(len(network.topo_i2n)):
+        node_id=network.topo_i2n[nidx]
+        num_cats=network.card_node[node_id]
+        #Reset the random state stream
+        rs = RandomState(MT19937(SeedSequence(int(time.time()%100000000))))
+
+        '''
+        Now we will generate a random string from 0 to len(do_config)
+        0: dont take
+        1: put in component 1 if present
+        ..
+        ..
+        len(do_config): create new component
+
+
+        1/2 prob of taking old, 1/2 (new or in no component)
+        3/4 of coming and 1/4 not coming if old is there
+        '''
+        location_old=np.random.permutation(
+                            np.arange(1,len(do_config)+1)).tolist()
+        location_zero=np.random.randint(0,2,size=num_cats).tolist()
+        #Now creating our location
+        location=[]
+        old_cidx=0
+        for cidx in range(num_cats):
+            if np.random.randint(0,2)==0 and old_cidx<len(location_old):
+                #Come in some old component
+                location.append(location_old[old_cidx])
+                old_cidx+=1
+            elif location_zero[cidx]==0:
+                #Dont come
+                location.append(0)
+            else:
+                #Come as new component
+                location.append(len(do_config)+1)
+
+        #Ensuring alteast one category is gone
+        if np.sum(location==0)==0:
+            location[np.random.randint(0,num_cats)]=0
+        _=np.random.randint(0,num_cats)
+
+        for cidx,choice in enumerate(location):
+            # print("Choice:",nidx,cidx,choice)
+            if choice==0:
+                #leave the guy
+                continue
+            elif choice==len(do_config)+1:
+                #Time for a new config
+                do_config.append([[nidx,],[cidx,]])
+            else:
+                #Put it in old component
+                do_config[choice-1][0].append(nidx)
+                do_config[choice-1][1].append(cidx)
+    #Now we will have to generate a mixing coefficient for these compoent
+    mix_coefficient=np.random.uniform(1,100,size=len(do_config)+1)
+    #Normalizing the coefficient
+    mix_coefficient=mix_coefficient/np.sum(mix_coefficient)
+    #Leaving out the probability for base distribution
+    mix_coefficient=mix_coefficient[0:-1].tolist()
+
+    do_nidx,do_cidx=zip(*do_config)
+    do_config=list(zip(do_nidx,do_cidx,mix_coefficient))
+    print("\n\n############# DO-CONFIG ##############")
+    pprint(do_config)
+    print("######################################\n\n")
+    return do_config
 
 
 if __name__=="__main__":
@@ -501,12 +577,14 @@ if __name__=="__main__":
     redistribute_probability_mass(base_network,total_distribute_mass)
 
     #Creating artificial intervention
-    do_config=[
-                ((0,4),(1,0),0.2),
-                ((1,),(1,),0.1),
-                ((2,6),(1,1),0.3),
-                ((5,),(0,),0.3)
-            ]
+    # do_config=[
+    #             ((0,4),(1,0),0.2),
+    #             ((1,),(1,),0.1),
+    #             ((2,6),(1,1),0.3),
+    #             ((5,),(0,),0.3)
+    #         ]
+    do_config=get_random_internvention_config(base_network)
+    # pdb.set_trace()
 
     #Initializing our Solver
     solver=NonOverlapIntvSolve(base_network=base_network,
