@@ -333,13 +333,17 @@ class NonOverlapIntvSolve():
         for cidx in range(num_cats):
             x_cand=solve_system_analytically(cidx)
 
-            #Now first check we have to perform is positivity of all x
-            num_pos=np.sum(x_cand>=0.0)
-            if(num_pos<num_cats):
-                continue
             #Now we will select only the one which give minimum residual
             residual=np.sum(((np.matmul(A,x_cand)-b))**2)
             print("Residual:{}\nNew Guess:{}".format(residual,x_cand))
+
+            #Now first check we have to perform is positivity of all x
+            # num_pos=np.sum(x_cand>=0.0)
+            # if(num_pos<num_cats):
+            #     # continue
+            #     #Instead of removing the guy we will take abs val.
+            #     #cuz mostly the error is -1e-25, which could be made +ve
+            #     x_cand=np.abs(x_cand)
 
             if residual<min_error:
                 min_error=residual
@@ -578,13 +582,9 @@ if __name__=="__main__":
     redistribute_probability_mass(base_network,total_distribute_mass)
 
     #Creating artificial intervention
-    # do_config=[
-    #             ((0,4),(1,0),0.2),
-    #             ((1,),(1,),0.1),
-    #             ((2,6),(1,1),0.3),
-    #             ((5,),(0,),0.3)
-    #         ]
-    do_config=get_random_internvention_config(base_network)
+    do_config=get_random_internvention_config(base_network)[0:2]
+    do_config[0]=(do_config[0][0],do_config[0][1],0.4)
+    do_config[1]=(do_config[1][0],do_config[1][1],0.3)
     # pdb.set_trace()
 
     #Initializing our Solver
