@@ -434,6 +434,57 @@ class NonOverlapIntvSolve():
         return left_cidx[-1]
 
 
+def redistribute_probability_mass(network,eps):
+    '''
+    This function will slightly nudge the CPDs of all the nodes such that,
+    none of point will have zero probability.
+    '''
+    #One by one we will go through all the node in the network
+    for node in network.topo_n2i.keys():
+        #Retreiving the old network
+        old_cpd=network.base_graph.get_cpds(node).values
+        #Now we will go through all the columns (here) and spread goodness
+        assert old_cpd.shape[0]==network.card_node[node],"dim mismatch"
+
+        if np.sum(old_cpd==0)==0:
+            continue
+        print("Node:",node)
+        print("old_cpd:\n",network.base_graph.get_cpds(node))
+
+        def redistribute_column(col,eps):
+            '''
+            This fucntion will work on one single column
+            eps     : total mass to be distributed among all the zeros
+            '''
+            #Getting the number of places to migrate
+            num_zeros=np.sum(col==0.0)*1.0
+            num_non_zero=col.shape[0]-num_zeros
+            if num_zeros==0:
+                return col
+
+            #Getting the mass to distribute
+            mass_add_per_zero=eps/num_zeros
+            add_vector=(col==0.0)*mass_add_per_zero
+
+            mass_sub_per_non_zero=eps/num_non_zero
+            sub_vector=(col!=0.0)*mass_sub_per_non_zero
+
+            #Now applying the redistribution
+            new_col=col+add_vector-sub_vector
+            assert abs(1-np.sum(new_col))<1e-20
+            return new_col
+
+        #Now we will apply this redistribution to every columns
+        new_cpd=np.apply_along_axis(func1d=redistribute_column,
+                                    axis=0,
+                                    arr=old_cpd,
+                                    eps=eps)
+
+        #Now we will update the old_cpd
+        network.base_graph.get_cpds(node).values=new_cpd
+        print("new_cpd:\n",network.base_graph.get_cpds(node))
+    return network
+
 if __name__=="__main__":
     #Initializing the graph
     graph_name="asia"
@@ -441,28 +492,17 @@ if __name__=="__main__":
     base_network=BnNetwork(modelpath)
 
     #Tweaking of the CPDs
-    #Skewed Asia CPD
-    asia_cpd=base_network.base_graph.get_cpds("asia")
-    from pgmpy.factors.discrete import TabularCPD
-    new_asia_cpd=TabularCPD("asia",
-                        2,
-                        np.array([[0.10],[0.90]]))
-    base_network.base_graph.remove_cpds(asia_cpd)
-    base_network.base_graph.add_cpds(new_asia_cpd)
-
-    #Zero entry in the either CPD
-    new_either_cpd=np.array([[[0.95,0.95],[0.95,0.05]],
-                            [[0.05,0.05],[0.05,0.95]]])
-    base_network.base_graph.get_cpds("either").values=new_either_cpd
-    # pdb.set_trace()
-
-
+    total_distribute_mass=0.05
+    redistribute_probability_mass(base_network,total_distribute_mass)
 
     #Creating artificial intervention
     do_config=[
-                ((0,4),(1,0),0.2),
-                ((1,2,6),(0,1,1),0.3),
-                ((5,),(0,),0.3)
+                ((0,),(1,),0.1),
+                ((1,),(1,),0.1),
+                ((2,),(1,),0.1),
+                ((3,),(1,),0.1),
+                ((4,),(1,),0.1),
+                ((5,),(1,),0.1),
             ]
 
     #Initializing our Solver
