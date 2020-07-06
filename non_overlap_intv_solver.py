@@ -583,8 +583,6 @@ if __name__=="__main__":
 
     #Creating artificial intervention
     do_config=get_random_internvention_config(base_network)[0:2]
-    do_config[0]=(do_config[0][0],do_config[0][1],0.4)
-    do_config[1]=(do_config[1][0],do_config[1][1],0.3)
     # pdb.set_trace()
 
     #Initializing our Solver
