@@ -21,17 +21,22 @@ class DistributionHandler():
     base_network=None
     do_config=None
 
+    #Variables to estimate the true mixture prob (infinte sample limit)
     true_comp_pis=None      #pi's corresponding to actual mixture config
     true_comp_graphs=None   #interv component corresponding to actual mixture
 
-    def __init__(self,base_network,do_config):
+    #Variables to estimate the mixture probability from samples
+    mixtures_samples=None   #dataframe containing the mixture samples
+
+    def __init__(self,base_network,do_config,mixtures_samples):
         self.base_network=base_network
         self.do_config=do_config
 
         #Initialize the true mixture components (will simulate infinite data)
         if do_config!=None:
             self._get_true_mixture_graph()
-        #
+        #Intializing the mixture sample to estimate probability later
+        self.mixtures_samples=mixtures_samples
 
     def _get_true_mixture_graph(self,):
         '''
@@ -61,7 +66,7 @@ class DistributionHandler():
         self.true_comp_pis=true_comp_pis
         self.true_comp_graphs=true_comp_graphs
 
-    def _get_true_mixture_probability(self,sample):
+    def _get_true_mixture_probability(self,point):
         '''
         This function will calculate the true mixture probability of a sample,
         by running it on the actual components and giving the overall mixture
@@ -76,8 +81,8 @@ class DistributionHandler():
         sample_prob=0.0
         #Now we will iterate over all the individual component
         for comp_pi,comp_graph in zip(self.true_comp_pis,self.true_comp_graphs):
-            #Getting the sample probability in the interv graph
-            comp_prob=get_graph_sample_probability(comp_graph,sample,
+            #Getting the point probability in the interv graph
+            comp_prob=get_graph_sample_probability(comp_graph,point,
                                                     network_parameters,
                                                     marginal=True)
             #Adding to the probability in the mixture
@@ -85,16 +90,42 @@ class DistributionHandler():
 
         return sample_prob
 
-    def get_mixture_probability(self,sample,infinte_sample=False):
+    def _estimate_mixture_probability(self,point):
+        '''
+        This function will estaimate the point joint probability by
+        subsetting the data from the samples of mixture given to it.
+        '''
+        #First of all we have to get the subset mask
+        subset_mask=True
+        for node_id,cidx in point.items():
+            subset_mask=(mixture_samples[node_id]==cidx) & (subset_mask)
+
+        #Now we will subset the data
+        subset_samples=mixture_samples[subset_mask]
+
+        #Estimate the point probability
+        subset_size=subset_samples.shape[0]*1.0
+        total_size=mixture_samples.shape[0]*1.0
+
+        estm_point_prob=subset_size/total_size
+
+        return estm_point_prob
+
+    def get_mixture_probability(self,point,infinte_sample=False):
         '''
         This function will give us the mixture probability of a point either
         in the infinite sample limit or by using the estimated CPDs from
         the samples
+
+        point:  dictionary of node_id and corresponding category id
+                {
+                node_id: cat_idx
+                }
         '''
         if infinte_sample==True:
-            return self._get_true_mixture_probability(sample)
+            return self._get_true_mixture_probability(point)
         else:
-            raise NotImplementedError
+            return self._estimate_mixture_probability(point)
 
     def get_intervention_probability(self,sample,eval_do):
         '''
@@ -136,17 +167,21 @@ class NonOverlapIntvSolve():
     base_network=None       #The BnNetwork class instance of current porblem
     do_config=None          #The configuration of the true mixture
 
-    def __init__(self,base_network,do_config,infinte_mix_sample,
+    def __init__(self,base_network,do_config,
+                    infinte_mix_sample,mixture_samples,
                     opt_eps,zero_eps,insert_eps):
         self.base_network=base_network
         self.do_config=do_config
         self.infinte_mix_sample=infinte_mix_sample
+
         self.opt_eps=opt_eps            #Threshold for zeroing one cat in optim
         self.zero_eps=zero_eps          #Threshold for new comp creation
         self.insert_eps=insert_eps      #threshold in error while insert to new
 
         #Creating the distibution handler
-        self.dist_handler=DistributionHandler(base_network,do_config)
+        self.dist_handler=DistributionHandler(base_network,
+                                                do_config,
+                                                mixture_samples)
         self.solve()
 
     def solve(self,):
@@ -573,22 +608,37 @@ def get_random_internvention_config(network):
 
 if __name__=="__main__":
     #Initializing the graph
-    graph_name="alarm"
+    graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     base_network=BnNetwork(modelpath)
 
     #Tweaking of the CPDs
     total_distribute_mass=0.05
     redistribute_probability_mass(base_network,total_distribute_mass)
+    asia_cpd=base_network.base_graph.get_cpds("asia")
+    from pgmpy.factors.discrete import TabularCPD
+    new_asia_cpd=TabularCPD("asia",
+                        2,
+                        np.array([[0.10],[0.90]]))
+    base_network.base_graph.remove_cpds(asia_cpd)
+    base_network.base_graph.add_cpds(new_asia_cpd)
 
     #Creating artificial intervention
     do_config=get_random_internvention_config(base_network)[0:2]
     # pdb.set_trace()
 
+    #Now we will generate/retreive the samples for our mixture
+    mixture_sample_size=100000
+    mixture_samples=base_network.generate_sample_from_mixture(
+                                        do_config=do_config,
+                                        sample_size=mixture_sample_size)
+    # pdb.set_trace()
+
     #Initializing our Solver
     solver=NonOverlapIntvSolve(base_network=base_network,
                                 do_config=do_config,
-                                infinte_mix_sample=True,
+                                infinte_mix_sample=False,
+                                mixture_samples=mixture_samples,
                                 opt_eps=1e-10,
                                 zero_eps=1e-5,
                                 insert_eps=0.05)#This is in percentage error
