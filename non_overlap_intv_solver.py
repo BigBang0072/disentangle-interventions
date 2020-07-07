@@ -363,8 +363,7 @@ class NonOverlapIntvSolve():
             return x_cand
 
         #Now one by one we will try out the zeroing all categories
-        min_x_cand=None
-        min_error=10000000000000000.0
+        x_cand_and_error=[]
         for cidx in range(num_cats):
             x_cand=solve_system_analytically(cidx)
 
@@ -372,19 +371,19 @@ class NonOverlapIntvSolve():
             residual=np.sum(((np.matmul(A,x_cand)-b))**2)
             print("Residual:{}\nNew Guess:{}".format(residual,x_cand))
 
-            #Now first check we have to perform is positivity of all x
-            # num_pos=np.sum(x_cand>=0.0)
-            # if(num_pos<num_cats):
-            #     # continue
-            #     #Instead of removing the guy we will take abs val.
-            #     #cuz mostly the error is -1e-25, which could be made +ve
-            #     x_cand=np.abs(x_cand)
+            x_cand_and_error.append((x_cand,residual))
 
-            if residual<min_error:
-                min_error=residual
-                min_x_cand=x_cand
+        #Now we will sort the candidate by error
+        x_cand_and_error.sort(key=lambda x: x[-1])
+        for cand_idx,(x_cand,error) in enumerate(x_cand_and_error):
+            if cand_idx==(len(x_cand_and_error)-1):
+                return x_cand
+            elif np.sum(x_cand<0)>0:
+                continue
+            else:
+                return x_cand
 
-        return min_x_cand
+        return None
 
     def _insert_in_old_component(self,comp_dict,new_comp_dict,x_bars,nidx,zero_cat_list):
         '''
@@ -615,13 +614,6 @@ if __name__=="__main__":
     #Tweaking of the CPDs
     total_distribute_mass=0.05
     redistribute_probability_mass(base_network,total_distribute_mass)
-    asia_cpd=base_network.base_graph.get_cpds("asia")
-    from pgmpy.factors.discrete import TabularCPD
-    new_asia_cpd=TabularCPD("asia",
-                        2,
-                        np.array([[0.10],[0.90]]))
-    base_network.base_graph.remove_cpds(asia_cpd)
-    base_network.base_graph.add_cpds(new_asia_cpd)
 
     #Creating artificial intervention
     do_config=get_random_internvention_config(base_network)[0:2]
@@ -637,8 +629,8 @@ if __name__=="__main__":
     #Initializing our Solver
     solver=NonOverlapIntvSolve(base_network=base_network,
                                 do_config=do_config,
-                                infinte_mix_sample=False,
-                                mixture_samples=mixture_samples,
+                                infinte_mix_sample=True,
+                                mixture_samples=None,
                                 opt_eps=1e-10,
                                 zero_eps=1e-5,
                                 insert_eps=0.05)#This is in percentage error
