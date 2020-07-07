@@ -168,11 +168,11 @@ class NonOverlapIntvSolve():
     do_config=None          #The configuration of the true mixture
 
     def __init__(self,base_network,do_config,
-                    infinte_mix_sample,mixture_samples,
+                    infinite_mix_sample,mixture_samples,
                     opt_eps,zero_eps,insert_eps):
         self.base_network=base_network
         self.do_config=do_config
-        self.infinte_mix_sample=infinte_mix_sample
+        self.infinite_mix_sample=infinite_mix_sample
 
         self.opt_eps=opt_eps            #Threshold for zeroing one cat in optim
         self.zero_eps=zero_eps          #Threshold for new comp creation
@@ -250,7 +250,7 @@ class NonOverlapIntvSolve():
 
             #Get the mixture probability on this point
             p_mix=self.dist_handler.get_mixture_probability(x_eval,
-                                                    self.infinte_mix_sample)
+                                                    self.infinite_mix_sample)
             #Get the base dist prob on this eval point
             p_base=self.dist_handler.get_intervention_probability(x_eval,
                                                     eval_do=None)
@@ -432,7 +432,7 @@ class NonOverlapIntvSolve():
                 x_full=x_rest.copy()
                 x_full[node_id]=zcidx
                 pmix_full=self.dist_handler.get_mixture_probability(
-                                            x_full,self.infinte_mix_sample)
+                                            x_full,self.infinite_mix_sample)
 
                 #Now we have to generate the test probability
                 pbase_full=self.dist_handler.get_intervention_probability(
@@ -446,6 +446,12 @@ class NonOverlapIntvSolve():
 
                 #Now we will see if we are equal within some slackness
                 test_error=(abs(pmix_full-ptest_full)/pmix_full)*100
+                print(
+                "cname:{}\tzcidx:{}\t%error:{}\tpmix:{}".format(
+                                                cname,
+                                                zcidx,
+                                                test_error,
+                                                pmix_full,))
                 if test_error<self.insert_eps:
                     candidate_insert_list.append([cname,zcidx,test_error])
 
@@ -607,7 +613,7 @@ def get_random_internvention_config(network):
 
 if __name__=="__main__":
     #Initializing the graph
-    graph_name="asia"
+    graph_name="alarm"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     base_network=BnNetwork(modelpath)
 
@@ -616,12 +622,16 @@ if __name__=="__main__":
     redistribute_probability_mass(base_network,total_distribute_mass)
 
     #Creating artificial intervention
-    do_config=get_random_internvention_config(base_network)[0:2]
+    do_config=get_random_internvention_config(base_network)
     # pdb.set_trace()
 
     #Now we will generate/retreive the samples for our mixture
-    mixture_sample_size=100000
-    mixture_samples=base_network.generate_sample_from_mixture(
+    infinite_mix_sample=True
+    if infinite_mix_sample:
+        mixture_samples=None
+    else:
+        mixture_sample_size=100000
+        mixture_samples=base_network.generate_sample_from_mixture(
                                         do_config=do_config,
                                         sample_size=mixture_sample_size)
     # pdb.set_trace()
@@ -629,8 +639,8 @@ if __name__=="__main__":
     #Initializing our Solver
     solver=NonOverlapIntvSolve(base_network=base_network,
                                 do_config=do_config,
-                                infinte_mix_sample=True,
-                                mixture_samples=None,
+                                infinite_mix_sample=infinite_mix_sample,
+                                mixture_samples=mixture_samples,
                                 opt_eps=1e-10,
                                 zero_eps=1e-5,
                                 insert_eps=0.05)#This is in percentage error
