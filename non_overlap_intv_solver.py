@@ -182,7 +182,7 @@ class NonOverlapIntvSolve():
         self.dist_handler=DistributionHandler(base_network,
                                                 do_config,
                                                 mixture_samples)
-        self.solve()
+        # self.solve()
 
     def solve(self,):
         '''
@@ -610,14 +610,65 @@ def get_random_internvention_config(network):
     print("######################################\n\n")
     return do_config
 
+def match_and_get_score(actual_configs,predicted_configs):
+    '''
+    This fucntion will match the prediction from the actual in a partial,
+    manner to get a score for our prediction instead of full match.
+    Method:
+    1. Match the two component based on the first guy of the coponent
+        (This will check the accuracy of Step-1)
+    2. Now once the components are matched, get the precision and recall
+        for that component and get an F-score.
+    3. Similarly compute the mse for that component.
+    4.Now take an average F-Score and average MSE as a one number evaluation
+        metric.
+
+    A slightly different method for evaluation could be do the partial,
+    matchin such that maximum (average) F-score is obtained. (Later)
+    '''
+    predicted_configs=list(predicted_configs.values())
+
+    #Getting the matching prediction for each of the acutal ones
+    matched_configs_score=[]
+    for nodes,cats,pi in actual_configs:
+        #Getting the first component of the configuration
+        first_node=nodes[0]
+        first_cat=cats[0]
+
+        #Now search for this guys is present as first element
+        for pnodes,pcats,ppi in predicted_configs:
+            if pnodes[0]==first_node and pcats[0]==first_cat:
+                print("Mactching:{} with:{}".format((nodes,cats),
+                                                    (pnodes,pcats)))
+                #merging nodes and category in one single list
+                actual_comp=set(zip(nodes,cats))
+                predicted_comp=set(zip(pnodes,pcats))
+
+                #Calculating the jaccard similarity
+                match=actual_comp.intersection(predicted_comp)
+                total_guys=actual_comp.intersection(predicted_comp)
+                jaccard_sim=len(match)/len(total_guys)
+
+                #Calculating the mse in the pis
+                mse=(pi-ppi)**2
+                matched_configs_score.append((jaccard_sim,mse))
+                break
+
+    #Now we will calcuate the avarage similarity score and mse
+    all_sim,all_mse=zip(*matched_configs_score)
+    avg_jaccard_sim=np.mean(all_sim)
+    avg_mse=np.mean(all_mse)
+
+    return avg_jaccard_sim,avg_mse
+
 
 if __name__=="__main__":
     #Initializing the graph
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     base_network=BnNetwork(modelpath)
-    import networkx as nx
-    pdb.set_trace()
+    # import networkx as nx
+    # pdb.set_trace()
 
     #Tweaking of the CPDs
     total_distribute_mass=0.05
@@ -646,3 +697,10 @@ if __name__=="__main__":
                                 opt_eps=1e-10,
                                 zero_eps=1e-5,
                                 insert_eps=0.05)#This is in percentage error
+    predicted_configs,x_bars=solver.solve()
+
+    #Getting the evaluation metric
+    avg_jaccard_sim,avg_mse=match_and_get_score(do_config,
+                                                predicted_configs)
+    print("\n\nAverage Jaccard Score:",avg_jaccard_sim)
+    print("Average_mse:",avg_mse)
