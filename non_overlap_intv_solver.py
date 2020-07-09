@@ -616,6 +616,7 @@ if __name__=="__main__":
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     base_network=BnNetwork(modelpath)
+    import networkx as nx
     pdb.set_trace()
 
     #Tweaking of the CPDs
@@ -624,7 +625,7 @@ if __name__=="__main__":
 
     #Creating artificial intervention
     do_config=get_random_internvention_config(base_network)
-    pdb.set_trace()
+    # pdb.set_trace()
 
     #Now we will generate/retreive the samples for our mixture
     infinite_mix_sample=True

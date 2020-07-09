@@ -71,7 +71,7 @@ class BnNetwork():
         topo_level={}
         curr_level=0
         while(len(in_degree)>0):
-            pdb.set_trace()
+            # pdb.set_trace()
             #Getting the nodes with zero indegree
             zero_nodes=[node for node,deg_left in in_degree.items()
                                             if deg_left==0]
