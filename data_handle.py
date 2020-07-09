@@ -57,13 +57,36 @@ class BnNetwork():
         #Getting the topological order and adjacency list
         adj_set=defaultdict(set)
         inv_adj_set=defaultdict(set)
+        in_degree={node:0 for node in nodes}
         for fr,to in edges:
             adj_set[fr].add(to)
             inv_adj_set[to].add(fr)
+            in_degree[to]+=1
         #BEWARE: this function take inverse adj_list
         topo_nodes=toposort_flatten(inv_adj_set)
         topo_i2n={i:node for i,node in enumerate(topo_nodes)}
         topo_n2i={node:i for i,node in enumerate(topo_nodes)}
+
+        #Now we will calcuate the topological level ordering
+        topo_level={}
+        curr_level=0
+        while(len(in_degree)>0):
+            pdb.set_trace()
+            #Getting the nodes with zero indegree
+            zero_nodes=[node for node,deg_left in in_degree.items()
+                                            if deg_left==0]
+            topo_level[curr_level]=set(zero_nodes)
+            curr_level+=1
+
+            #Now we will reduce the indegree of connection form these nodes
+            for node in zero_nodes:
+                #Removing these nodes from in_degree list
+                del in_degree[node]
+                #Now reducing the degrre of it's to conenction
+                for to_node in adj_set[node]:
+                    in_degree[to_node]-=1
+        #Now we are done with the topological levels
+        self.topo_level=topo_level
 
         #Adding the property to class
         self.base_graph=base_graph
