@@ -636,23 +636,29 @@ def match_and_get_score(actual_configs,predicted_configs):
         first_cat=cats[0]
 
         #Now search for this guys is present as first element
+        match_flag=0
         for pnodes,pcats,ppi in predicted_configs:
             if pnodes[0]==first_node and pcats[0]==first_cat:
-                print("Mactching:{} with:{}".format((nodes,cats),
-                                                    (pnodes,pcats)))
+                print("Mactching:{} \twith:{}".format((nodes,cats,pi),
+                                                    (pnodes,pcats,ppi)))
                 #merging nodes and category in one single list
                 actual_comp=set(zip(nodes,cats))
                 predicted_comp=set(zip(pnodes,pcats))
 
                 #Calculating the jaccard similarity
                 match=actual_comp.intersection(predicted_comp)
-                total_guys=actual_comp.intersection(predicted_comp)
+                total_guys=actual_comp.union(predicted_comp)
                 jaccard_sim=len(match)/len(total_guys)
+                # print(jaccard_sim,match,total_guys)
 
                 #Calculating the mse in the pis
                 mse=(pi-ppi)**2
                 matched_configs_score.append((jaccard_sim,mse))
+                match_flag=1
                 break
+        #Now if the component is not matched then we will add it's score
+        if match_flag==0:
+            matched_configs_score.append((0.0,pi))
 
     #Now we will calcuate the avarage similarity score and mse
     all_sim,all_mse=zip(*matched_configs_score)
@@ -679,7 +685,7 @@ if __name__=="__main__":
     # pdb.set_trace()
 
     #Now we will generate/retreive the samples for our mixture
-    infinite_mix_sample=True
+    infinite_mix_sample=False
     if infinite_mix_sample:
         mixture_samples=None
     else:
