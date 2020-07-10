@@ -4,7 +4,7 @@ import dash_html_components as html
 from dash.dependencies import Input,Output,State
 import plotly.graph_objects as go
 
-from app_utils import load_network,create_graph_plot,disentangle_and_evaluate
+from app_utils import *
 from non_overlap_intv_solver import redistribute_probability_mass
 
 
@@ -84,7 +84,7 @@ def render_synthetic_tab():
                     max=len(sample_size_choice)-1,
                     marks={idx:str(size)
                             for idx,size in enumerate(sample_size_choice)},
-                    value=2,
+                    value=len(sample_size_choice)-1,
                     id="root_sample_size",
                 ),
 
@@ -99,7 +99,7 @@ def render_synthetic_tab():
                         {"label":100000, "value":100000},
                         {"label":"infinite", "value":"infinite"},
                     ],
-                    value=[100,10000,100000,"infinite"],
+                    value=[10,100,1000,10000,"infinite"],
                     id="eval_sample_size",
                 ),
 
@@ -148,23 +148,46 @@ def update_causal_graph(graph_type):
     return create_graph_plot(network.base_graph,
                             network.topo_level)
 
-#Call back to start the execution of test
-@app.callback(Output("matched_configs_tbl","children"),
-            [Input("eval_button","n_clicks")],
-            [State("graph_type","value"),
-             State("root_sample_size","value")]
-        )
-def update_table(n_clicks,graph_type,size_idx):
-    #Now we will have to generate a prediction on these parameters
-    sample_size=sample_size_choice[size_idx]
+
+#Now we will create the evaluation function on different sample size
+@app.callback([Output("metric_graph","figure"),
+               Output("matched_configs_tbl","children")],
+                [Input("eval_button","n_clicks")],
+                [State("graph_type","value",),
+                State("root_sample_size","value"),
+                 State("eval_sample_size","value")]
+            )
+def evaluate_on_samples(n_clicks,graph_type,root_size_idx,eval_sizes):
     network=all_networks[graph_type]
+    #Adding the root sample size
+    root_size=sample_size_choice[root_size_idx]
+    if root_size not in eval_sizes:
+        eval_sizes.append(root_size)
+    #First of all we have to generate a random do config
+    print("Getting the Do-Config")
+    do_config=get_random_internvention_config(network)
 
-    #Now we will solve our problem
-    table_element=disentangle_and_evaluate(network,sample_size,table_columns)
+    #Now we will evaluate the graph on different sample sizes
+    avg_jaccard_sim_list=[]
+    avg_mse_list=[]
+    tbl_element=None
+    for size in eval_sizes:
+        avg_jaccard_sim,avg_mse,tbl=disentangle_and_evaluate(
+                                    network,do_config,
+                                    size,table_columns)
 
-    return table_element
+        #Keeping all the metrics
+        avg_jaccard_sim_list.append(avg_jaccard_sim)
+        avg_mse_list.append(avg_mse)
 
+        if size==root_size:
+            tbl_element=tbl
 
+    #Now we are ready to plot the metrics
+    # pdb.set_trace()
+    fig=plot_evaluation_metrics(avg_jaccard_sim_list,avg_mse_list,eval_sizes)
+
+    return fig,tbl_element
 
 
 if __name__=="__main__":

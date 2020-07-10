@@ -190,9 +190,10 @@ class BnNetwork():
             sampler=BayesianModelSampling(do_graph)
             #Only sample the amount required
             num_sample=int(sample_size*pi)
-            samples=sampler.forward_sample(size=num_sample,
-                                    return_type="dataframe")
-            all_samples.append(samples)
+            if num_sample>0:
+                samples=sampler.forward_sample(size=num_sample,
+                                        return_type="dataframe")
+                all_samples.append(samples)
 
         # pdb.set_trace()
         #Now we will merge all the samples in one and shuffle it

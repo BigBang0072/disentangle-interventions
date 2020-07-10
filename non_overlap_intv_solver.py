@@ -695,7 +695,7 @@ if __name__=="__main__":
     if infinite_mix_sample:
         mixture_samples=None
     else:
-        mixture_sample_size=100000
+        mixture_sample_size=10000
         mixture_samples=base_network.generate_sample_from_mixture(
                                         do_config=do_config,
                                         sample_size=mixture_sample_size)

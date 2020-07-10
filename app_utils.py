@@ -2,6 +2,8 @@ import dash
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
 import networkx as nx
 import numpy as np
 
@@ -120,15 +122,11 @@ def create_graph_plot(graph_obj,topo_level):
 
 #############################################################################
 ###################### DISENTANGLING THE MIXTURE ############################
-def disentangle_and_evaluate(base_network,sample_size,table_columns):
+def disentangle_and_evaluate(base_network,do_config,sample_size,table_columns):
     '''
     This function will disentangle the internvetion and then evalaute it
     and also generate the table.
     '''
-    #First of all we have to generate a random do config
-    print("Getting the Do-Config")
-    do_config=get_random_internvention_config(base_network)
-
     #Gettig the samples
     print("Getting the Samples for Disentangling")
     infinite_mix_sample=False
@@ -139,6 +137,7 @@ def disentangle_and_evaluate(base_network,sample_size,table_columns):
         mixture_samples=base_network.generate_sample_from_mixture(
                                             do_config=do_config,
                                             sample_size=sample_size)
+    # pdb.set_trace()
 
     #Now lets solve the problem
     #Initializing our Solver
@@ -169,4 +168,56 @@ def disentangle_and_evaluate(base_network,sample_size,table_columns):
         ])
     ]),
 
-    return table_element
+    return avg_jaccard_sim,avg_mse,table_element
+
+def plot_evaluation_metrics(jaccard_list,mse_list,sample_sizes):
+    '''
+    This fucntion will plot the evalaution metrics as a function of sample
+    sizes.
+    '''
+    fig=make_subplots(specs=[[{"secondary_y":True}]])
+    x_axis_tickvals=list(range(len(sample_sizes)))
+
+    #Sorting the lsit base on sample size
+    inf_flag=1 if "infinite" in sample_sizes else 0
+    for sidx,size in enumerate(sample_sizes):
+        if size=="infinite":
+            sample_sizes[sidx]=1000000000
+
+    comb_list=list(zip(jaccard_list,mse_list,sample_sizes))
+    comb_list.sort(key=lambda x:x[-1])
+    jaccard_list,mse_list,sample_sizes=zip(*comb_list)
+    sample_sizes=list(sample_sizes)
+    if inf_flag==1:
+        sample_sizes[-1]="infinite"
+    # pdb.set_trace()
+
+    #Adding the mse trace
+    fig.add_trace(
+        go.Scatter(y=mse_list,
+                        name="MSE",
+                        mode="lines+markers",
+                        marker=dict(symbol="square",
+                                    size=10),
+                    ),
+        secondary_y=False,
+    )
+    #Adding the Jaccard Trace
+    fig.add_trace(
+        go.Scatter(y=jaccard_list,
+                        name="Jaccard Sim",
+                        mode="lines+markers",
+                        marker=dict(symbol="circle",
+                                    size=10),
+                ),
+        secondary_y=True,
+    )
+
+    #Setting the x and y axis titles
+    fig.update_xaxes(title_text="Sample Size",ticktext=sample_sizes,
+                                                tickvals=x_axis_tickvals,
+                                                ticklen=10)
+    fig.update_yaxes(title_text="<b>MSE</b>",secondary_y=False)
+    fig.update_yaxes(title_text="<b>Similarity</b>",secondary_y=True)
+
+    return fig
