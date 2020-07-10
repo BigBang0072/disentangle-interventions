@@ -26,9 +26,9 @@ class DistributionHandler():
     true_comp_graphs=None   #interv component corresponding to actual mixture
 
     #Variables to estimate the mixture probability from samples
-    mixtures_samples=None   #dataframe containing the mixture samples
+    mixture_samples=None   #dataframe containing the mixture samples
 
-    def __init__(self,base_network,do_config,mixtures_samples):
+    def __init__(self,base_network,do_config,mixture_samples):
         self.base_network=base_network
         self.do_config=do_config
 
@@ -36,7 +36,7 @@ class DistributionHandler():
         if do_config!=None:
             self._get_true_mixture_graph()
         #Intializing the mixture sample to estimate probability later
-        self.mixtures_samples=mixtures_samples
+        self.mixture_samples=mixture_samples
 
     def _get_true_mixture_graph(self,):
         '''
@@ -98,14 +98,14 @@ class DistributionHandler():
         #First of all we have to get the subset mask
         subset_mask=True
         for node_id,cidx in point.items():
-            subset_mask=(mixture_samples[node_id]==cidx) & (subset_mask)
+            subset_mask=(self.mixture_samples[node_id]==cidx) & (subset_mask)
 
         #Now we will subset the data
-        subset_samples=mixture_samples[subset_mask]
+        subset_samples=self.mixture_samples[subset_mask]
 
         #Estimate the point probability
         subset_size=subset_samples.shape[0]*1.0
-        total_size=mixture_samples.shape[0]*1.0
+        total_size=self.mixture_samples.shape[0]*1.0
 
         estm_point_prob=subset_size/total_size
 
@@ -630,6 +630,7 @@ def match_and_get_score(actual_configs,predicted_configs):
 
     #Getting the matching prediction for each of the acutal ones
     matched_configs_score=[]
+    matched_configs=[]
     for nodes,cats,pi in actual_configs:
         #Getting the first component of the configuration
         first_node=nodes[0]
@@ -641,6 +642,11 @@ def match_and_get_score(actual_configs,predicted_configs):
             if pnodes[0]==first_node and pcats[0]==first_cat:
                 print("Mactching:{} \twith:{}".format((nodes,cats,pi),
                                                     (pnodes,pcats,ppi)))
+                concat_fn=lambda lst:"["+",".join(str(id) for id in lst)+"]"
+                matched_configs.append([concat_fn(nodes),
+                                        concat_fn(cats),
+                                        concat_fn(pnodes),
+                                        concat_fn(pcats)])
                 #merging nodes and category in one single list
                 actual_comp=set(zip(nodes,cats))
                 predicted_comp=set(zip(pnodes,pcats))
@@ -665,7 +671,7 @@ def match_and_get_score(actual_configs,predicted_configs):
     avg_jaccard_sim=np.mean(all_sim)
     avg_mse=np.mean(all_mse)
 
-    return avg_jaccard_sim,avg_mse
+    return avg_jaccard_sim,avg_mse,matched_configs
 
 
 if __name__=="__main__":
@@ -706,7 +712,7 @@ if __name__=="__main__":
     predicted_configs,x_bars=solver.solve()
 
     #Getting the evaluation metric
-    avg_jaccard_sim,avg_mse=match_and_get_score(do_config,
+    avg_jaccard_sim,avg_mse,matched_configs=match_and_get_score(do_config,
                                                 predicted_configs)
     print("\n\nAverage Jaccard Score:",avg_jaccard_sim)
     print("Average_mse:",avg_mse)

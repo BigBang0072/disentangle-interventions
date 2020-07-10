@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 
 from data_handle import BnNetwork
+from non_overlap_intv_solver import *
 #Import code downloaded from other's github repo for directed edges in plotly
 from addEdge import addEdge
 
@@ -26,6 +27,8 @@ def load_network(network_name):
 
     return base_network
 
+##############################################################################
+########################  GRAPH LAYOUT DESIGN ################################
 def generate_topo_level_layout(topo_level,scale=5):
     '''
     This function will generate a custom generate loyout pattern for the nodes
@@ -114,3 +117,56 @@ def create_graph_plot(graph_obj,topo_level):
                         plot_bgcolor="rgb(255,255,255)")
 
     return fig
+
+#############################################################################
+###################### DISENTANGLING THE MIXTURE ############################
+def disentangle_and_evaluate(base_network,sample_size,table_columns):
+    '''
+    This function will disentangle the internvetion and then evalaute it
+    and also generate the table.
+    '''
+    #First of all we have to generate a random do config
+    print("Getting the Do-Config")
+    do_config=get_random_internvention_config(base_network)
+
+    #Gettig the samples
+    print("Getting the Samples for Disentangling")
+    infinite_mix_sample=False
+    if sample_size=="infinite":
+        mixture_samples=None
+        infinite_mix_sample=True
+    else:
+        mixture_samples=base_network.generate_sample_from_mixture(
+                                            do_config=do_config,
+                                            sample_size=sample_size)
+
+    #Now lets solve the problem
+    #Initializing our Solver
+    solver=NonOverlapIntvSolve(base_network=base_network,
+                                do_config=do_config,
+                                infinite_mix_sample=infinite_mix_sample,
+                                mixture_samples=mixture_samples,
+                                opt_eps=1e-10,
+                                zero_eps=1e-5,
+                                insert_eps=0.05)#This is in percentage error
+    predicted_configs,x_bars=solver.solve()
+
+    #Getting the evaluation metric
+    avg_jaccard_sim,avg_mse,matched_configs=match_and_get_score(do_config,
+                                                predicted_configs)
+    print("\n\nAverage Jaccard Score:",avg_jaccard_sim)
+    print("Average_mse:",avg_mse)
+
+    #Now we have to create a table object
+    table_element=html.Table([
+        html.Tr([html.Th("S.No.")]+[
+            html.Th(col) for col in table_columns]),
+
+        html.Tbody([
+            html.Tr([html.Td(idx)]+[html.Td(matched_configs[idx][col])
+                                    for col in range(len(table_columns))
+            ]) for idx in range(len(matched_configs))
+        ])
+    ]),
+
+    return table_element
