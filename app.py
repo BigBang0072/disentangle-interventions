@@ -28,7 +28,7 @@ table_columns=["Actual Nodes","Actual Category",
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app=dash.Dash("Root Cause Analysis",
             external_stylesheets=external_stylesheets,)
-# app.config.suppress_callback_exceptions=True
+app.config.suppress_callback_exceptions=True
 
 ###########################################################################
 #####################     Creating the Layout      ########################
@@ -106,12 +106,14 @@ def render_synthetic_tab():
                 #Adding the Starting button for processing
                 html.Button("Evaluate on Synthetic Mixture",id="eval_button"),
 
-            ],style={'display':"inline-block","width":"49%"}),
+            ],style={'display':"inline-block","width":"49%",
+                    "border":"1px black solid"}),
 
             #Creating the Causal Graph
             html.Div([
                 html.H2("Causal Graph",style={"textAlign":"center"}),
-                dcc.Graph(id="causal_graph")
+                # dcc.Graph(id="causal_graph")
+                html.Div(id="causal_graph"),
             ],style={'display':"inline-block","width":"49%",
                     "border":"1px black solid"})
         ]),
@@ -128,25 +130,29 @@ def render_synthetic_tab():
                         html.Tr([html.Th(col) for col in table_columns])
                     ]),
                 ])
-            ],style={'display':"inline-block","width":"49%"}),
+            ],style={'display':"inline-block","width":"49%",
+                    "border":"1px black solid"}),
             #Creating the Causal Graph
             html.Div([
                 html.H2("Prediction Error Metrics",style={"textAlign":"center"}),
                 dcc.Graph(id="metric_graph")
-            ],style={'display':"inline-block","width":"49%"})
+            ],style={'display':"inline-block","width":"49%",
+                    "border":"1px black solid"})
         ])
     ])
 
     return content
 
 #Call back to plot the graph
-@app.callback(Output("causal_graph","figure"),
+@app.callback(Output("causal_graph","children"),
             [Input("graph_type","value")])
 def update_causal_graph(graph_type):
     network=all_networks[graph_type]
 
-    return create_graph_plot(network.base_graph,
-                            network.topo_level)
+    # return create_graph_plot(network.base_graph,
+    #                         network.topo_level)
+    return create_graph_cytoscape(network.base_graph,
+                                network.topo_level)
 
 
 #Now we will create the evaluation function on different sample size

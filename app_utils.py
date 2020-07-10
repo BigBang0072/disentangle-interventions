@@ -3,6 +3,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import dash_cytoscape as cyto
 
 import networkx as nx
 import numpy as np
@@ -119,6 +120,61 @@ def create_graph_plot(graph_obj,topo_level):
                         plot_bgcolor="rgb(255,255,255)")
 
     return fig
+
+def create_graph_cytoscape(graph_obj,topo_level):
+    '''
+    '''
+    #Getting the location with topo-ordered levels
+    planar_locs=generate_topo_level_layout(topo_level)
+
+    #Creating the node element list
+    node_list=[]
+    for node in graph_obj.nodes():
+        #Retreiving the position of node
+        x,y=planar_locs[node].tolist()
+
+        #Creating the node element
+        element={"data":{"id":node,"label":node},
+                "position":{"x":x,"y":y},
+                "classes":"node",
+                }
+
+        node_list.append(element)
+
+    #Creating the edges of the graph
+    edge_list=[]
+    for fro,to in graph_obj.edges():
+        element={
+            "data":{"source":fro,"target":to,"label":fro+"_"+to},
+            "classes":"edge",
+        }
+        edge_list.append(element)
+
+    #Now we are ready to create graph
+    graph=cyto.Cytoscape(
+            id="causal_graph_cyto",
+            layout={"name":"cose"},
+            style={'width': '100%', 'height': '400px'},
+            elements=node_list+edge_list,
+            stylesheet=[
+                {
+                    "selector":"node",
+                    "style":{
+                        "content":"data(label)",
+                    }
+                },
+                {
+                    "selector":"edge",
+                    "style":{
+                        "curve-style":"bezier",
+                        "target-arrow-shape":"triangle",
+
+                    }
+                }
+            ]
+    )
+    return graph
+
 
 #############################################################################
 ###################### DISENTANGLING THE MIXTURE ############################
