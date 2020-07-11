@@ -4,6 +4,7 @@ import dash_html_components as html
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import dash_cytoscape as cyto
+import dash_table
 
 import networkx as nx
 import numpy as np
@@ -121,11 +122,46 @@ def create_graph_plot(graph_obj,topo_level):
 
     return fig
 
-def create_graph_cytoscape(graph_obj,topo_level):
+def create_graph_cytoscape(network,topo_level,matched_config,selected_row_id,):
     '''
     '''
+    graph_obj=network.base_graph
     #Getting the location with topo-ordered levels
     planar_locs=generate_topo_level_layout(topo_level)
+
+    #Now we have to first get the nodes we want to paint
+    node_colors={}
+    if selected_row_id!=None:
+        #Get the selected row
+        assert len(selected_row_id)<=1,"Single Selection allowed"
+        selected_row=matched_config[selected_row_id[0]]
+
+        #Get the compoenent elements from the row
+        numberify=lambda x:[int(ele) for ele in x[1:-1].split(",")]
+        actual_nodes=numberify(selected_row[0])
+        actual_cats=numberify(selected_row[1])
+        predict_nodes=numberify(selected_row[2])
+        predict_cats=numberify(selected_row[3])
+        #We know only node,cat will appear in this and they are sorted
+        actual_pairs=set(zip(actual_nodes,actual_cats))
+        predict_pairs=set(zip(predict_nodes,predict_cats))
+
+        for pair in actual_pairs.union(predict_pairs):
+            node_name=network.topo_i2n[pair[0]]
+            #If the node is present in both the prediction and actual
+            if pair in actual_pairs and pair in predict_pairs:
+                node_colors[node_name]="green"
+            elif pair in actual_pairs:
+                node_colors[node_name]="blue"
+            else:
+                node_colors[node_name]="red"
+    #Now defining the function to get the color
+    def get_class_assignment(node):
+        if node in node_colors:
+            return node_colors[node]
+        else:
+            return "generic"
+
 
     #Creating the node element list
     node_list=[]
@@ -136,7 +172,7 @@ def create_graph_cytoscape(graph_obj,topo_level):
         #Creating the node element
         element={"data":{"id":node,"label":node},
                 "position":{"x":x,"y":y},
-                "classes":"node",
+                "classes":get_class_assignment(node)
                 }
 
         node_list.append(element)
@@ -146,14 +182,13 @@ def create_graph_cytoscape(graph_obj,topo_level):
     for fro,to in graph_obj.edges():
         element={
             "data":{"source":fro,"target":to,"label":fro+"_"+to},
-            "classes":"edge",
         }
         edge_list.append(element)
 
     #Now we are ready to create graph
     graph=cyto.Cytoscape(
             id="causal_graph_cyto",
-            layout={"name":"cose"},
+            layout={"name":"breadthfirst"},
             style={'width': '100%', 'height': '400px'},
             elements=node_list+edge_list,
             stylesheet=[
@@ -161,6 +196,7 @@ def create_graph_cytoscape(graph_obj,topo_level):
                     "selector":"node",
                     "style":{
                         "content":"data(label)",
+                        "line_color":"black",
                     }
                 },
                 {
@@ -170,7 +206,28 @@ def create_graph_cytoscape(graph_obj,topo_level):
                         "target-arrow-shape":"triangle",
 
                     }
-                }
+                },
+                {
+                    "selector":".red",
+                    "style":{
+                        "background-color":"red",
+                        "line-color":"black"
+                    }
+                },
+                {
+                    "selector":".blue",
+                    "style":{
+                        "background-color":"blue",
+                        "line-color":"black"
+                    }
+                },
+                {
+                    "selector":".green",
+                    "style":{
+                        "background-color":"green",
+                        "line-color":"black"
+                    }
+                },
             ]
     )
     return graph
@@ -213,18 +270,40 @@ def disentangle_and_evaluate(base_network,do_config,sample_size,table_columns):
     print("Average_mse:",avg_mse)
 
     #Now we have to create a table object
-    table_element=html.Table([
-        html.Tr([html.Th("S.No.")]+[
-            html.Th(col) for col in table_columns]),
+    # table_element=html.Table([
+    #     html.Tr([html.Th("S.No.")]+[
+    #         html.Th(col) for col in table_columns]),
+    #
+    #     html.Tbody([
+    #         html.Tr([html.Td(idx)]+[html.Td(matched_configs[idx][col])
+    #                                 for col in range(len(table_columns))
+    #         ]) for idx in range(len(matched_configs))
+    #     ])
+    # ]),
 
-        html.Tbody([
-            html.Tr([html.Td(idx)]+[html.Td(matched_configs[idx][col])
-                                    for col in range(len(table_columns))
-            ]) for idx in range(len(matched_configs))
-        ])
-    ]),
+    #Creating the table using dash table
+    table_columns=table_columns
+    table_element=dash_table.DataTable(
+        id="matched_configs",
+        columns=[{"id":col,"name":col} for col in table_columns],
+        data=[
+            {table_columns[col]:matched_configs[idx][col]
+                        for col in range(len(table_columns))
+            } for idx in range(len(matched_configs))
+        ],
+        page_action="none",
+        fixed_rows={"headers":True},
+        style_table={"height":"600px"},
+        style_header={
+            "backgroundColor":"rgb(230, 230, 230)",
+            "fontWeight":"bold",
+            "border":"2px solid black",
+        },
+        style_data={"border":"1px solid black"},
+        row_selectable="single",
+    )
 
-    return avg_jaccard_sim,avg_mse,table_element
+    return avg_jaccard_sim,avg_mse,table_element,matched_configs
 
 def plot_evaluation_metrics(jaccard_list,mse_list,sample_sizes):
     '''

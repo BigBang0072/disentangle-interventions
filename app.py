@@ -24,6 +24,7 @@ redistribute_probability_mass(all_networks["alarm"],total_distribute_mass)
 sample_size_choice=[10,100,1000,10000,100000,"infinite"]
 table_columns=["Actual Nodes","Actual Category",
                 "Predicted Nodes","Predicted Category"]
+matched_config=None
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app=dash.Dash("Root Cause Analysis",
@@ -126,9 +127,14 @@ def render_synthetic_tab():
             html.Div([
                 html.H2("Root Cause Prediction",style={"textAlign":"center"}),
                 html.Div(id="matched_configs_tbl",children=[
-                    html.Table([html.Tr("S.No.")]+[
-                        html.Tr([html.Th(col) for col in table_columns])
-                    ]),
+                    dash_table.DataTable(
+                        id="matched_configs",
+                        columns=[{"id":col,"name":col} for col in table_columns],
+                        style_header={
+                            "backgroundColor":"white",
+                            "fontWeight":"bold",
+                        },
+                    )
                 ])
             ],style={'display':"inline-block","width":"49%",
                     "border":"1px black solid"}),
@@ -145,14 +151,21 @@ def render_synthetic_tab():
 
 #Call back to plot the graph
 @app.callback(Output("causal_graph","children"),
-            [Input("graph_type","value")])
-def update_causal_graph(graph_type):
+            [Input("graph_type","value"),
+            Input("matched_configs","selected_rows")]
+            )
+def update_causal_graph(graph_type,selected_row_id):
     network=all_networks[graph_type]
+    # pdb.set_trace()
+    print("selected_rows:",selected_row_id)
+    print("matched_config:",matched_config)
 
     # return create_graph_plot(network.base_graph,
     #                         network.topo_level)
-    return create_graph_cytoscape(network.base_graph,
-                                network.topo_level)
+    return create_graph_cytoscape(network,
+                                network.topo_level,
+                                matched_config,
+                                selected_row_id)
 
 
 #Now we will create the evaluation function on different sample size
@@ -177,8 +190,9 @@ def evaluate_on_samples(n_clicks,graph_type,root_size_idx,eval_sizes):
     avg_jaccard_sim_list=[]
     avg_mse_list=[]
     tbl_element=None
+    global matched_config
     for size in eval_sizes:
-        avg_jaccard_sim,avg_mse,tbl=disentangle_and_evaluate(
+        avg_jaccard_sim,avg_mse,tbl,config=disentangle_and_evaluate(
                                     network,do_config,
                                     size,table_columns)
 
@@ -188,6 +202,7 @@ def evaluate_on_samples(n_clicks,graph_type,root_size_idx,eval_sizes):
 
         if size==root_size:
             tbl_element=tbl
+            matched_config=config
 
     #Now we are ready to plot the metrics
     # pdb.set_trace()
