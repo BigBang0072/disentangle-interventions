@@ -3,5 +3,5 @@ temp
 *.txt
 *.png
 *.DS_Store
-*.csv
 *.sh
+*.csv
