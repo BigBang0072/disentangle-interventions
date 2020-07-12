@@ -13,7 +13,8 @@ from non_overlap_intv_solver import redistribute_probability_mass
 ###########################################################################
 all_networks={
                 "asia"  :load_network("asia"),
-                "alarm" :load_network("alarm")
+                "alarm" :load_network("alarm"),
+                "flipkart":load_network("flipkart_7jul19")
             }
 
 #Making the CPD good boy

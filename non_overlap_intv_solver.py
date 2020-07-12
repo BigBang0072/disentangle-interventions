@@ -7,7 +7,7 @@ from scipy.optimize import minimize
 import pdb
 from pprint import pprint
 
-from data_handle import BnNetwork,get_graph_sample_probability
+from data_handle import *
 
 
 class DistributionHandler():
@@ -521,7 +521,11 @@ def redistribute_probability_mass(network,eps):
 
             #Now applying the redistribution
             new_col=col+add_vector-sub_vector
-            assert abs(1-np.sum(new_col))<1e-20
+
+            print("col_shape:",new_col.shape,"Error:",abs(1-np.sum(new_col)))
+            assert abs(1-np.sum(new_col))<1e-5
+            #Now lets remormalize the prob dist
+            new_col=new_col/np.sum(new_col)
             return new_col
 
         #Now we will apply this redistribution to every columns
@@ -676,8 +680,9 @@ def match_and_get_score(actual_configs,predicted_configs):
 
 if __name__=="__main__":
     #Initializing the graph
-    graph_name="asia"
+    graph_name="flipkart_7jul19"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
+    mixpath="dataset/FlipkartDataset/Flipkart11Jul2019_clean.csv"
     base_network=BnNetwork(modelpath)
     # import networkx as nx
     # pdb.set_trace()
@@ -692,13 +697,16 @@ if __name__=="__main__":
 
     #Now we will generate/retreive the samples for our mixture
     infinite_mix_sample=False
+    synthetic_sample=False
     if infinite_mix_sample:
         mixture_samples=None
-    else:
+    elif synthetic_sample:
         mixture_sample_size=10000
         mixture_samples=base_network.generate_sample_from_mixture(
                                         do_config=do_config,
                                         sample_size=mixture_sample_size)
+    else:
+        mixture_samples=load_flipkart_mixture_sample(mixpath,base_network)
     # pdb.set_trace()
 
     #Initializing our Solver

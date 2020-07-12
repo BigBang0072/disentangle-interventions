@@ -54,6 +54,15 @@ class BnNetwork():
         #Getting the names of nodes and its edges
         nodes=reader.get_variables()
         edges=reader.get_edges()
+        #Getting the variables names /state for each nodes
+        self.states=reader.get_states()
+        self.states_c2i={key:{val:np.int32(idx) for idx,val
+                                                in enumerate(kval)}
+                            for key,kval in self.states.items()}
+        self.states_i2c={key:{np.int32(idx):val for idx,val
+                                                in enumerate(kval)}
+                            for key,kval in self.states.items()}
+
         #Getting the topological order and adjacency list
         adj_set=defaultdict(set)
         inv_adj_set=defaultdict(set)
@@ -451,6 +460,46 @@ def decode_sample_one_hot(samples_one_hot,network_parameters):
     #Concatenating all the rows into one big dataframe
     df=pd.concat(all_row_entry,ignore_index=True)
     return df
+
+##########################################################################
+##### Data handling for Flipkar dataset
+def load_flipkart_mixture_sample(filepath,base_network):
+    '''
+    This will be used in the inference case when the the sample is taken
+    in real world data. Then we have to rename the names of Category
+    to the number in the sample dataset
+    '''
+    print("Reading the Real World Mixture Sample")
+    df=pd.read_csv(filepath)
+    #Subset only those variable which are in our bn network
+    df=df[base_network.nodes]
+    #COnverting everything into string
+    def convert_to_str(element):
+        #Hack to remove the error made by bnlearn by removing  (,) with _
+        element=str(element).replace("(","_").replace(")","_")
+        return element
+
+    df=df.applymap(np.vectorize(convert_to_str))
+
+    print("Converting the Category to Index")
+    # pdb.set_trace()
+    #Now we will define the maping function of the dataframe
+    def map_cat2index(columns):
+        # print("columns.name:",columns.name)
+        return columns.map(base_network.states_c2i[columns.name])
+
+    #Applying the mapping fucntion to every columns
+    df_map=df.apply(map_cat2index,axis=0)
+    assert df.shape==df_map.shape
+
+    #Now we will remove the rows which which are null
+    df_map=df_map[df_map.isnull().any(axis=1)==False]
+    #Find out why it's getting converted to float (to accomodate NA mostly)
+    df_map.astype(np.int32)
+    print("Total Rows Left:",df.shape[0],df_map.shape[0])
+    # pdb.set_trace()
+
+    return df_map
 
 if __name__=="__main__":
     #Testing the base model and intervention
