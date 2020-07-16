@@ -3,6 +3,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input,Output,State
 import plotly.graph_objects as go
+import dash_bootstrap_components as dbc
 
 from app_utils import *
 from non_overlap_intv_solver import redistribute_probability_mass
@@ -27,7 +28,9 @@ table_columns=["Actual Nodes","Actual Category",
                 "Predicted Nodes","Predicted Category"]
 matched_config=None
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+external_stylesheets = [#'https://codepen.io/chriddyp/pen/bWLwgP.css',
+                        dbc.themes.LUX,
+                        ]
 app=dash.Dash("Root Cause Analysis",
             external_stylesheets=external_stylesheets,)
 app.config.suppress_callback_exceptions=True
@@ -63,71 +66,80 @@ def render_synthetic_tab():
     '''
     content=html.Div([
         #Creating the div for configuration block and graph
-        html.Div([
+        dbc.Row([
             #Creating the configuration block
-            html.Div([
+            dbc.Col([
                 html.H2("Experiment Configuration",style={"textAlign":"center"}),
-                #Selecting the type of Graph
-                html.Label("Select Synthetic Graph:"),
-                dcc.Dropdown(
-                    options=[
-                        {"label":"Asia","value":"asia"},
-                        {"label":"Alarm","value":"alarm"},
-                        {"label":"Flipkart","value":"flipkart"},
-                    ],
-                    id="graph_type",
-                    value="asia",
-                ),
+                dbc.Form([
+                    #Selecting the type of Graph
+                    dbc.FormGroup([
+                        html.Label("Select Synthetic Graph:"),
+                        dcc.Dropdown(
+                            options=[
+                                {"label":"Asia","value":"asia"},
+                                {"label":"Alarm","value":"alarm"},
+                                {"label":"Flipkart","value":"flipkart"},
+                            ],
+                            id="graph_type",
+                            value="asia",
+                        ),
+                    ]),
 
-                #Synthetic Prediction Sample Size
-                html.Label("Sample Size for Root Cause Prediction:"),
-                dcc.Slider(
-                    min=0,
-                    max=len(sample_size_choice)-1,
-                    marks={idx:str(size)
-                            for idx,size in enumerate(sample_size_choice)},
-                    value=len(sample_size_choice)-1,
-                    id="root_sample_size",
-                ),
+                    #Synthetic Prediction Sample Size
+                    dbc.FormGroup([
+                        html.Label("Sample Size for Root Cause Prediction:"),
+                        dcc.Slider(
+                            min=0,
+                            max=len(sample_size_choice)-1,
+                            marks={idx:str(size)
+                                    for idx,size in enumerate(sample_size_choice)},
+                            value=len(sample_size_choice)-1,
+                            id="root_sample_size",
+                        ),
+                    ]),
 
-                #CheckBox for samples size to be used for evaluation
-                html.Label("Sample Size for Synthetic Evaluation:"),
-                dcc.Checklist(
-                    options=[
-                        {"label":10, "value":10},
-                        {"label":100,"value":100},
-                        {"label":1000, "value":1000},
-                        {"label":10000,"value":10000},
-                        {"label":100000, "value":100000},
-                        {"label":"infinite", "value":"infinite"},
-                    ],
-                    value=[10,100,1000,10000,"infinite"],
-                    id="eval_sample_size",
-                ),
+                    #CheckBox for samples size to be used for evaluation
+                    dbc.FormGroup([
+                        html.Label("Sample Size for Synthetic Evaluation:"),
+                        dbc.Checklist(
+                            options=[
+                                {"label":10, "value":10},
+                                {"label":100,"value":100},
+                                {"label":1000, "value":1000},
+                                {"label":10000,"value":10000},
+                                {"label":100000, "value":100000},
+                                {"label":"infinite", "value":"infinite"},
+                            ],
+                            value=[10,100,1000,10000,"infinite"],
+                            id="eval_sample_size",
+                            switch=True,
+                        ),
+                    ]),
 
-                #Adding the Starting button for processing
-                html.Button("Evaluate on Synthetic Mixture",id="eval_button"),
-
+                    #Adding the Starting button for processing
+                    html.Button("Evaluate on Synthetic Mixture",id="eval_button",
+                                className="button"),
+                ]),
             ],style={'display':"inline-block","width":"49%",
-                    "border":"1px black solid"}),
+                    "border":"1px black solid"},),
 
             #Creating the Causal Graph
-            html.Div([
+            dbc.Col([
                 html.H2("Causal Graph",style={"textAlign":"center"}),
                 # dcc.Graph(id="causal_graph")
                 html.Div(id="causal_graph"),
             ],style={'display':"inline-block","width":"49%",
-                    "border":"1px black solid"})
+                    "border":"1px black solid"},)
         ]),
 
 
 
         #Creating the div for Component prediction and Evaluation Metrics
-        html.Div([
+        dbc.Row([
             #Creating the configuration block
-            html.Div([
+            dbc.Col([
                 html.H2("Root Cause Prediction",style={"textAlign":"center"}),
-                html.Div(id="matched_configs_tbl",children=[
+                dbc.Col(id="matched_configs_tbl",children=[
                     dash_table.DataTable(
                         id="matched_configs",
                         columns=[{"id":col,"name":col} for col in table_columns],
@@ -135,16 +147,17 @@ def render_synthetic_tab():
                             "backgroundColor":"white",
                             "fontWeight":"bold",
                         },
+                        row_selectable="single",
                     )
                 ])
             ],style={'display':"inline-block","width":"49%",
-                    "border":"1px black solid"}),
+                    "border":"1px black solid"},),
             #Creating the Causal Graph
-            html.Div([
+            dbc.Col([
                 html.H2("Prediction Error Metrics",style={"textAlign":"center"}),
                 dcc.Graph(id="metric_graph")
             ],style={'display':"inline-block","width":"49%",
-                    "border":"1px black solid"})
+                    "border":"1px black solid"},)
         ])
     ])
 
@@ -213,4 +226,4 @@ def evaluate_on_samples(n_clicks,graph_type,root_size_idx,eval_sizes):
 
 
 if __name__=="__main__":
-    app.run_server(debug=True)
+    app.run_server(debug=False,port=8050)

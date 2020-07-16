@@ -680,7 +680,7 @@ def match_and_get_score(actual_configs,predicted_configs):
 
 if __name__=="__main__":
     #Initializing the graph
-    graph_name="flipkart_7jul19"
+    graph_name="alarm"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     mixpath="dataset/FlipkartDataset/Flipkart11Jul2019_clean.csv"
     base_network=BnNetwork(modelpath)
@@ -697,11 +697,11 @@ if __name__=="__main__":
 
     #Now we will generate/retreive the samples for our mixture
     infinite_mix_sample=False
-    synthetic_sample=False
+    synthetic_sample=True
     if infinite_mix_sample:
         mixture_samples=None
     elif synthetic_sample:
-        mixture_sample_size=10000
+        mixture_sample_size=100000
         mixture_samples=base_network.generate_sample_from_mixture(
                                         do_config=do_config,
                                         sample_size=mixture_sample_size)
@@ -715,7 +715,7 @@ if __name__=="__main__":
                                 infinite_mix_sample=infinite_mix_sample,
                                 mixture_samples=mixture_samples,
                                 opt_eps=1e-10,
-                                zero_eps=1e-5,
+                                zero_eps=1e-3,
                                 insert_eps=0.05)#This is in percentage error
     predicted_configs,x_bars=solver.solve()
 

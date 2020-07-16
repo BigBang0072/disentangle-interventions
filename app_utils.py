@@ -188,7 +188,7 @@ def create_graph_cytoscape(network,topo_level,matched_config,selected_row_id,):
     #Now we are ready to create graph
     graph=cyto.Cytoscape(
             id="causal_graph_cyto",
-            layout={"name":"breadthfirst"},
+            layout={"name":"cose"},
             style={'width': '100%', 'height': '400px'},
             elements=node_list+edge_list,
             stylesheet=[
@@ -292,14 +292,15 @@ def disentangle_and_evaluate(base_network,do_config,sample_size,table_columns):
             } for idx in range(len(matched_configs))
         ],
         page_action="none",
-        fixed_rows={"headers":True},
+        # fixed_rows={"headers":True},
         style_table={"height":"600px"},
         style_header={
             "backgroundColor":"rgb(230, 230, 230)",
             "fontWeight":"bold",
             "border":"2px solid black",
         },
-        style_data={"border":"1px solid black"},
+        style_data={"border":"1px solid black",
+                    "height":"auto"},
         row_selectable="single",
     )
 
