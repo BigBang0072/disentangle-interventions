@@ -420,8 +420,9 @@ def disentangle(graph_type,base_network,do_config,sample_size):
                   {"id":"Contribution","name":"Contribution"}],
         data=[
             {"Decision Group":convert_config_to_json(group),
-             "Contribution":float("{0:.1f}".format(group[-1]*100))}
-                for group in predicted_configs.values()
+             "Contribution":float("{0:.1f}".format(group[-1]*100)),
+             "id":cid,
+             } for cid,group in predicted_configs.items()
         ],
         page_action="none",
         row_selectable="single",
@@ -459,4 +460,4 @@ def disentangle(graph_type,base_network,do_config,sample_size):
         filter_action="native",
     )
 
-    return root_cause_tbl
+    return root_cause_tbl,predicted_configs

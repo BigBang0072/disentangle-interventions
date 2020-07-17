@@ -23,6 +23,8 @@ all_do_configs={
         "flipkart":None
 }
 
+#Global variable to hold the predicted configs for plotting
+predicted_configs={}
 #Making the CPD good boy
 total_distribute_mass=0.05
 redistribute_probability_mass(all_networks["asia"],total_distribute_mass)
@@ -125,6 +127,39 @@ def render_tab_content(active_tab,n_clicks,graph_type,sample_size):
     else:
         raise NotImplementedError
 
+@app.callback(Output("strength_viz_graph","figure"),
+                [Input("root_cause_tbl","derived_virtual_row_ids"),
+                 Input("root_cause_tbl","selected_rows")])
+def pull_from_strength_piechart(order_row_ids,sidx):
+    '''
+    '''
+    # assert len(derived_virtual_row_ids)<=1,"One selection boy!!"
+    if order_row_ids==None:
+        return go.Figure()
+    print("sidx:{}\t order:{}".format(sidx,order_row_ids))
+    #Now lets create the pie-chard data
+    labels=[]
+    values=[]
+    pull=[]
+    global predicted_configs
+    for tidx,(cid,config) in enumerate(predicted_configs.items()):
+        labels.append(cid)
+        #Getting the mixing coefficient value
+        pi=config[-1]
+        values.append(pi)
+
+        #Creating the pull vector
+        if sidx!=None and sidx[-1]==tidx:
+            pull.append(0.2)
+        else:
+            pull.append(0.0)
+
+    #Now we will plot the piechart
+    fig=go.Figure(data=[
+        go.Pie(labels=labels,values=values,pull=pull)
+    ])
+
+    return fig
 
 ###########################################################################
 ############################    HELPER FUNCTIONS      #####################
@@ -136,7 +171,9 @@ def render_root_viz_tab(graph_type,sample_size):
     network=all_networks[graph_type]
     do_config=all_do_configs[graph_type]
     #Now lets disentangle the mixture
-    root_cause_tbl=disentangle(graph_type,network,do_config,sample_size)
+    global predicted_configs
+    root_cause_tbl,predicted_configs=disentangle(graph_type,
+                                        network,do_config,sample_size)
 
     #Creating the Layout for the tab
     content=html.Div([
