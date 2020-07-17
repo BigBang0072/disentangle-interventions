@@ -23,6 +23,8 @@ class BnNetwork():
     adj_set=None            #Adjacency list of base graph
     topo_i2n=None           #The topological ordering (index to node dict)
     topo_n2i=None           #node to index in topological ordering
+    states_c2i=None         #dict of dict
+    states_i2c=None         #dict of each nodes's category from idx to name
 
     #Variables for one-hot encoding of samples
     vector_length=None      #Length of one-hot vector

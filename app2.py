@@ -6,8 +6,8 @@ import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
 import dash_table
 
-from non_overlap_intv_solver import redistribute_probability_mass
-from app_utils import load_network
+from non_overlap_intv_solver import *
+from app_utils import load_network,disentangle
 
 ###########################################################################
 #####################       Global Variables       ########################
@@ -17,6 +17,11 @@ all_networks={
                 "alarm" :load_network("alarm"),
                 "flipkart":load_network("flipkart_7jul19")
             }
+all_do_configs={
+        "asia"  :get_random_internvention_config(all_networks["asia"]),
+        "alarm" :get_random_internvention_config(all_networks["alarm"]),
+        "flipkart":None
+}
 
 #Making the CPD good boy
 total_distribute_mass=0.05
@@ -29,6 +34,7 @@ date_range_size={
     "last 7 days":1000,
     "last 14 days":10000,
     "last 1 month":100000,
+    "last 1 year":"infinite",
 }
 
 external_stylesheets = [#'https://codepen.io/chriddyp/pen/bWLwgP.css',
@@ -75,6 +81,7 @@ app.layout=dbc.Container([
                                 for range,size in date_range_size.items()
                         ],
                         id="sample_size",
+                        value=1000,
                     ),
                     width=5,
                 ),
@@ -104,12 +111,15 @@ app.layout=dbc.Container([
 ###########################################################################
 #Now we will have to generate the tab content
 @app.callback(Output("tab_content","children"),
-            [Input("tabs","active_tab")])
-def render_tab_content(active_tab):
+            [Input("tabs","active_tab"),
+             Input("go_button","n_clicks")],
+            [State("graph_type","value"),
+             State("sample_size","value")])
+def render_tab_content(active_tab,n_clicks,graph_type,sample_size):
     '''
     '''
     if active_tab=="root_viz":
-        return render_root_viz_tab()
+        return render_root_viz_tab(graph_type,sample_size)
     elif active_tab=="counter_effect":
         return html.H3("Work in Progres")
     else:
@@ -119,27 +129,22 @@ def render_tab_content(active_tab):
 ###########################################################################
 ############################    HELPER FUNCTIONS      #####################
 ###########################################################################
-def render_root_viz_tab():
+def render_root_viz_tab(graph_type,sample_size):
     '''
     '''
+    #Finding the root cause for the given graph and sample_size
+    network=all_networks[graph_type]
+    do_config=all_do_configs[graph_type]
+    #Now lets disentangle the mixture
+    root_cause_tbl=disentangle(graph_type,network,do_config,sample_size)
+
+    #Creating the Layout for the tab
     content=html.Div([
         dbc.Row([
         #Creating the root Cause Table
-            dbc.Col(id="root_cause_tbl",children=[
+            dbc.Col(id="root_cause_div",children=[
                 html.H2("Root Cause Table",style={"textAlign":"center"}),
-                dash_table.DataTable(
-                    id="root_cause",
-                    columns=[{"id":"Decision Group","name":"Decision Group"}],
-                    row_selectable="single",
-                    style_header={
-                        "backgroundColor":"rgb(230, 230, 230)",
-                        "fontWeight":"bold",
-                        "border":"2px solid black",
-                        "textAlign":"center"
-                    },
-                    style_data={"border":"1px solid black",
-                                "height":"auto"},
-                )
+                root_cause_tbl,
             ],width=3,style={"border":"1px black solid"},),
 
             #Creating the Prediction Graph

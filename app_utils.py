@@ -8,6 +8,7 @@ import dash_table
 
 import networkx as nx
 import numpy as np
+import json
 
 from data_handle import BnNetwork
 from non_overlap_intv_solver import *
@@ -357,3 +358,105 @@ def plot_evaluation_metrics(jaccard_list,mse_list,sample_sizes):
     fig.update_yaxes(title_text="<b>Similarity</b>",secondary_y=True)
 
     return fig
+
+
+######################### APP-2 helper functions#########################
+def disentangle(graph_type,base_network,do_config,sample_size):
+    '''
+    This function will disentangle the internvetion, for the configs
+    and also generate the table.
+    '''
+    #Gettig the samples
+    print("Getting the Samples for Disentangling")
+    infinite_mix_sample=False
+    if sample_size=="infinite":
+        mixture_samples=None
+        infinite_mix_sample=True
+    elif graph_type!="flipkart":
+        mixture_samples=base_network.generate_sample_from_mixture(
+                                            do_config=do_config,
+                                            sample_size=sample_size)
+    else:
+        #Now for flipkart when no going for infinite sample, we load the data
+        raise NotImplementedError
+    # pdb.set_trace()
+
+    #Now lets solve the problem
+    #Initializing our Solver
+    solver=NonOverlapIntvSolve(base_network=base_network,
+                                do_config=do_config,
+                                infinite_mix_sample=infinite_mix_sample,
+                                mixture_samples=mixture_samples,
+                                opt_eps=1e-10,
+                                zero_eps=1e-5,
+                                insert_eps=0.05)#This is in percentage error
+    predicted_configs,x_bars=solver.solve()
+
+    def convert_config_to_json(group):
+        '''
+        This functio nwill convert the found root cause to json string,
+        such that the number are replaced with the names.
+        '''
+        nodes,cats,pi=group
+        # print(group)
+        #Renaming the number to node name
+        nodes=[base_network.topo_i2n[node] for node  in nodes]
+        cats=[base_network.states_i2c[node][cidx]
+                        for node,cidx in zip(nodes,cats)]
+
+        #Now we are ready to create the cause group
+        cause={node:cat for node,cat in zip(nodes,cats)}
+        json_cause=json.dumps(cause,indent=4,
+                                separators=("  "," : "))
+        print(json_cause)
+
+        return json_cause
+
+
+    #Now we are ready to generate the table entry of component
+    root_cause_tbl=dash_table.DataTable(
+        id="root_cause_tbl",
+        columns=[{"id":"Decision Group","name":"Decision Group"},
+                  {"id":"Contribution","name":"Contribution"}],
+        data=[
+            {"Decision Group":convert_config_to_json(group),
+             "Contribution":float("{0:.1f}".format(group[-1]*100))}
+                for group in predicted_configs.values()
+        ],
+        page_action="none",
+        row_selectable="single",
+        style_table={"height":"400px",
+                    "overflowY":"auto",},
+        css=[{'selector': '.row', 'rule': 'margin: 0'}],
+        fixed_rows={"headers":True},
+        style_header={
+            "backgroundColor":"rgb(230, 230, 230)",
+            "fontWeight":"bold",
+            "border":"2px solid black",
+            "textAlign":"center"
+        },
+        style_data={"border":"1px solid black",
+                    "textAlign":"left"},
+        style_cell={"overflow":"hidden",
+                    "textOverflow":"ellipsis",
+                    "maxWidth":0,},
+        tooltip_data=[
+                    {
+                    "Decision Group": {'value': convert_config_to_json(group),
+                                        'type': 'markdown'},
+                    "Contribution":{'value':"{0:.1f} %".format(group[-1]*100),
+                                        'type': 'markdown'}
+                    } for group in predicted_configs.values()
+                ],
+        tooltip_duration=None,
+        style_cell_conditional=[
+                        {'if': {'column_id': 'Decision Group'},
+                         'width': '65%'},
+                        {'if': {'column_id': 'Contribution'},
+                         'width': '35%'},
+                    ],
+        sort_action="native",
+        filter_action="native",
+    )
+
+    return root_cause_tbl
