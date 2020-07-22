@@ -3,6 +3,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input,Output,State
 import plotly.graph_objects as go
+import dash_cytoscape as cyto
 import dash_bootstrap_components as dbc
 import dash_table
 
@@ -127,6 +128,77 @@ def render_tab_content(active_tab,n_clicks,graph_type,sample_size):
     else:
         raise NotImplementedError
 
+@app.callback(Output("node_viz_graph","children"),
+                [Input("root_cause_tbl","derived_virtual_row_ids"),
+                Input("root_cause_tbl","selected_rows"),
+                Input("graph_type","value")])
+def visualize_component_in_graph(order_row_ids,sidx,graph_type):
+    '''
+    '''
+    #Now we will generate the graph
+    network=all_networks[graph_type]
+
+    #Now creating the color assignment
+    node_color={node:"generic" for node in network.topo_n2i.keys()}
+    #Now getting the name of node_index for guys to color
+    global predicted_configs
+    for tidx,(compid,config) in enumerate(predicted_configs.items()):
+        nidx=config[0]
+        if sidx!=None and tidx==sidx[-1]:
+            for nid in nidx:
+                node_color[network.topo_i2n[nid]]="red"
+
+    #Now we are ready to creat the graph
+    node_list=[]
+    for node in network.base_graph.nodes():
+        element={
+                "data":{"id":node,"label":node},
+                "classes":node_color[node]
+        }
+        node_list.append(element)
+
+    #Creating the edge list
+    edge_list=[]
+    for fro,to in network.base_graph.edges():
+        element={
+            "data":{"source":fro,"target":to,"label":fro+"_"+to},
+        }
+        edge_list.append(element)
+
+    #Creating the graph
+    graph=cyto.Cytoscape(
+            id="causal_graph_cyto",
+            layout={"name":"cose"},
+            style={"width":"100%","height":"400px"},
+            elements=node_list+edge_list,
+            stylesheet=[
+                {
+                    "selector":"node",
+                    "style":{
+                        "content":"data(label)",
+                        "line_color":"black",
+                    }
+                },
+                {
+                    "selector":"edge",
+                    "style":{
+                        "curve-style":"bezier",
+                        "target-arrow-shape":"triangle",
+
+                    }
+                },
+                {
+                    "selector":".red",
+                    "style":{
+                        "background-color":"red",
+                        "line-color":"black"
+                    }
+                },
+            ]
+    )
+
+    return graph
+
 @app.callback(Output("strength_viz_graph","figure"),
                 [Input("root_cause_tbl","derived_virtual_row_ids"),
                  Input("root_cause_tbl","selected_rows")])
@@ -188,7 +260,7 @@ def render_root_viz_tab(graph_type,sample_size):
             dbc.Col([
                 html.H2("Root Cause Visualization",
                         style={"textAlign":"center"}),
-                dcc.Graph(id="node_viz_graph")
+                html.Div(id="node_viz_graph")
             ],width=4,style={"border":"1px black solid"},),
 
             dbc.Col([
