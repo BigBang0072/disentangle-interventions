@@ -28,6 +28,9 @@ class DistributionHandler():
     #Variables to estimate the mixture probability from samples
     mixture_samples=None   #dataframe containing the mixture samples
 
+    #A cache to avoid computing the do distirubiton again and again
+    do_graph_cache={}
+
     def __init__(self,base_network,do_config,mixture_samples):
         self.base_network=base_network
         self.do_config=do_config
@@ -134,6 +137,11 @@ class DistributionHandler():
 
         eval_do     : None for base dist else will generate a new do graph
                         and evalate the sampple on that.
+
+        TODO:
+        Instead of caching we could calcutlate the do graph once only
+        at the begining of call in add_to_old_component function.
+        We will see if memory becomes an issue.
         '''
         #Config of the network
         network_parameters={}
@@ -149,9 +157,20 @@ class DistributionHandler():
                                                 network_parameters,
                                                 marginal=True)
         else:
-            #First of all we have to get the graph for this eval_do config
-            node_ids,cat_ids=eval_do
-            do_graph=self.base_network.do(node_ids,cat_ids)
+            #Checking if we have do_graph in cache
+            eval_do[0]=tuple(eval_do[0])
+            eval_do[1]=tuple(eval_do[1])
+
+            if tuple(eval_do) in self.do_graph_cache:
+                do_graph=self.do_graph_cache[tuple(eval_do)]
+                # print(self.do_graph_cache)
+            else:
+                #First of all we have to get the graph for this eval_do config
+                node_ids,cat_ids=eval_do
+                do_graph=self.base_network.do(node_ids,cat_ids)
+
+                #Now we will cache the do graph
+                self.do_graph_cache[tuple(eval_do)]=do_graph
 
             prob=get_graph_sample_probability(do_graph,sample,
                                                 network_parameters,
@@ -680,7 +699,7 @@ def match_and_get_score(actual_configs,predicted_configs):
 
 if __name__=="__main__":
     #Initializing the graph
-    graph_name="alarm"
+    graph_name="flipkart_7jul19"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     mixpath="dataset/FlipkartDataset/Flipkart11Jul2019_clean.csv"
     base_network=BnNetwork(modelpath)
@@ -696,8 +715,8 @@ if __name__=="__main__":
     # pdb.set_trace()
 
     #Now we will generate/retreive the samples for our mixture
-    infinite_mix_sample=False
-    synthetic_sample=True
+    infinite_mix_sample=True
+    synthetic_sample=False
     if infinite_mix_sample:
         mixture_samples=None
     elif synthetic_sample:
