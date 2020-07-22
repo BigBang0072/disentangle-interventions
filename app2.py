@@ -21,7 +21,7 @@ all_networks={
 all_do_configs={
         "asia"  :get_random_internvention_config(all_networks["asia"]),
         "alarm" :get_random_internvention_config(all_networks["alarm"]),
-        "flipkart":None
+        "flipkart":get_random_internvention_config(all_networks["flipkart"])
 }
 
 #Global variable to hold the predicted configs for plotting
@@ -30,7 +30,7 @@ predicted_configs={}
 total_distribute_mass=0.05
 redistribute_probability_mass(all_networks["asia"],total_distribute_mass)
 redistribute_probability_mass(all_networks["alarm"],total_distribute_mass)
-# redistribute_probability_mass(all_networks["flipkart"],total_distribute_mass)
+redistribute_probability_mass(all_networks["flipkart"],total_distribute_mass)
 
 #Dummmy Sample size and Date Range configs
 date_range_size={

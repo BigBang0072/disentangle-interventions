@@ -161,16 +161,16 @@ class DistributionHandler():
             eval_do[0]=tuple(eval_do[0])
             eval_do[1]=tuple(eval_do[1])
 
-            if tuple(eval_do) in self.do_graph_cache:
-                do_graph=self.do_graph_cache[tuple(eval_do)]
-                # print(self.do_graph_cache)
-            else:
-                #First of all we have to get the graph for this eval_do config
-                node_ids,cat_ids=eval_do
-                do_graph=self.base_network.do(node_ids,cat_ids)
+            # if tuple(eval_do) in self.do_graph_cache:
+            #     do_graph=self.do_graph_cache[tuple(eval_do)]
+            #     # print(self.do_graph_cache)
+            # else:
+            #First of all we have to get the graph for this eval_do config
+            node_ids,cat_ids=eval_do
+            do_graph=self.base_network.do(node_ids,cat_ids)
 
-                #Now we will cache the do graph
-                self.do_graph_cache[tuple(eval_do)]=do_graph
+                # #Now we will cache the do graph
+                # self.do_graph_cache[tuple(eval_do)]=do_graph
 
             prob=get_graph_sample_probability(do_graph,sample,
                                                 network_parameters,
@@ -558,7 +558,7 @@ def redistribute_probability_mass(network,eps):
         print("new_cpd:\n",network.base_graph.get_cpds(node))
     return network
 
-def get_random_internvention_config(network,num_config):
+def get_random_internvention_config(network,num_config=10):
     '''
     This function will generate a random intervention to test our algo
     '''

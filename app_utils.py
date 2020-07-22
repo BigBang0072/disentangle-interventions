@@ -10,7 +10,7 @@ import networkx as nx
 import numpy as np
 import json
 
-from data_handle import BnNetwork
+from data_handle import *
 from non_overlap_intv_solver import *
 #Import code downloaded from other's github repo for directed edges in plotly
 from addEdge import addEdge
@@ -378,7 +378,9 @@ def disentangle(graph_type,base_network,do_config,sample_size):
                                             sample_size=sample_size)
     else:
         #Now for flipkart when no going for infinite sample, we load the data
-        raise NotImplementedError
+        # raise NotImplementedError
+        mixpath="dataset/FlipkartDataset/Flipkart11Jul2019_clean.csv"
+        mixture_samples=load_flipkart_mixture_sample(mixpath,base_network)
     # pdb.set_trace()
 
     #Now lets solve the problem
