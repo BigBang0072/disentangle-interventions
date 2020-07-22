@@ -558,7 +558,7 @@ def redistribute_probability_mass(network,eps):
         print("new_cpd:\n",network.base_graph.get_cpds(node))
     return network
 
-def get_random_internvention_config(network):
+def get_random_internvention_config(network,num_config):
     '''
     This function will generate a random intervention to test our algo
     '''
@@ -619,6 +619,11 @@ def get_random_internvention_config(network):
                 #Put it in old component
                 do_config[choice-1][0].append(nidx)
                 do_config[choice-1][1].append(cidx)
+    #We dont want too many components
+    subset_idx=np.random.permutation(range(len(do_config)))
+    subset_idx=subset_idx[0:num_config]
+    do_config=[do_config[idx] for idx in subset_idx.tolist()]
+
     #Now we will have to generate a mixing coefficient for these compoent
     mix_coefficient=np.random.uniform(1,100,size=len(do_config)+1)
     #Normalizing the coefficient
@@ -711,7 +716,8 @@ if __name__=="__main__":
     redistribute_probability_mass(base_network,total_distribute_mass)
 
     #Creating artificial intervention
-    do_config=get_random_internvention_config(base_network)
+    num_config=20
+    do_config=get_random_internvention_config(base_network,num_config)
     # pdb.set_trace()
 
     #Now we will generate/retreive the samples for our mixture
