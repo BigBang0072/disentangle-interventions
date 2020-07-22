@@ -236,8 +236,8 @@ class NonOverlapIntvSolve():
         node_id=self.base_network.topo_i2n[nidx]
         num_cats=self.base_network.card_node[node_id]
         #Initializing the system matrix
-        A=np.zeros((num_cats,num_cats),dtype=np.float32)
-        b=np.zeros((num_cats,),dtype=np.float32)
+        A=np.zeros((num_cats,num_cats),dtype=np.float64)
+        b=np.zeros((num_cats,),dtype=np.float64)
 
         #Get the porb dist when the interv matches
         x_left=x_bars.copy()
@@ -350,7 +350,7 @@ class NonOverlapIntvSolve():
                 x_deno=(-1*b_trans[zero_guy]*deno_pbase)/all_pbase[zero_guy]
 
             #Now we will find all the other values
-            x_cand=np.zeros((num_cats,),dtype=np.float32)
+            x_cand=np.zeros((num_cats,),dtype=np.float64)
             for cidx in range(num_cats):
                 if cidx==zero_guy:
                     x_cand[cidx]=0.0
