@@ -52,60 +52,77 @@ app.config.suppress_callback_exceptions=True
 ###########################################################################
 
 app.layout=dbc.Container([
-    dbc.Card([
-        html.H1("Root Cause Analysis",style={"textAlign":"center"}),
-        #Taking the input from user
-        dbc.Form([
-            #Selecting the graph type
-            dbc.FormGroup([
-                dbc.Label("Select Graph for Anomaly Analysis:",
-                            html_for="graph_type",width=5),
-                dbc.Col(
-                    dcc.Dropdown(
-                        options=[
-                            {"label":"Asia","value":"asia"},
-                            {"label":"Alarm","value":"alarm"},
-                            {"label":"Flipkart","value":"flipkart"},
-                        ],
-                        id="graph_type",
-                        value="asia",
-                    ),
-                    width=5,
-                )
-            ],row=True),
-            #Selecting the Date range for analysis
-            dbc.FormGroup([
-                dbc.Label("Date Range to analyse Anomaly:",
-                            html_for="sample_size",width=5),
-                dbc.Col(
-                    dcc.Dropdown(
-                        options=[
-                            {"label":range,"value":size}
-                                for range,size in date_range_size.items()
-                        ],
-                        id="sample_size",
-                        value=1000,
-                    ),
-                    width=5,
-                ),
-            ],row=True),
-            #Button to Start the analysis
-            dbc.Button("Find Root Cause",color="primary",id="go_button")
-        ]),
-    ]),
+    dbc.Row([
+        dbc.Col(
+            dbc.Card([
+                dbc.CardHeader("Root Cause Analysis : Configuration",
+                                style={"textAlign":"center"}),
+                #Taking the input from user
+                dbc.Form([
+                    #Selecting the graph type
+                    dbc.FormGroup([
+                        dbc.Label("Select Graph for Anomaly Analysis:",
+                                    html_for="graph_type",width=5),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options=[
+                                    {"label":"Asia","value":"asia"},
+                                    {"label":"Alarm","value":"alarm"},
+                                    {"label":"Flipkart","value":"flipkart"},
+                                ],
+                                id="graph_type",
+                                value="asia",
+                            ),
+                            width=5,
+                        )
+                    ],row=True),
+                    #Selecting the Date range for analysis
+                    dbc.FormGroup([
+                        dbc.Label("Date Range to analyse Anomaly:",
+                                    html_for="sample_size",width=5),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options=[
+                                    {"label":range,"value":size}
+                                        for range,size in date_range_size.items()
+                                ],
+                                id="sample_size",
+                                value=1000,
+                            ),
+                            width=5,
+                        ),
+                    ],row=True),
+                    #Button to Start the analysis
+                    dbc.FormGroup([
+                        dbc.Col(
+                            dbc.Button("Find Root Cause",color="primary",id="go_button"),
+                            width=4,
+                        ),
+                    ]),
+                ]),
+            ],color="dark",outline=True),
+        )
+    ],justify="center"),
+
 
     #Now we will create tabs for different purposes
-    dbc.Card([
-        dbc.Tabs(
-            [
-                dbc.Tab(label="Root Causes Visualization",tab_id="root_viz"),
-                dbc.Tab(label="Conterfactual Effect",tab_id="counter_efffect"),
-            ],
-            id="tabs",
-            active_tab="root_viz",
-        ),
-        html.Div(id="tab_content")
-    ]),
+    dbc.Row([
+        dbc.Col(
+            dbc.Card([
+                dbc.CardHeader("Root Cause Analysis : Results",
+                                style={"textAlign":"center"}),
+                dbc.Tabs(
+                    [
+                        dbc.Tab(label="Root Causes Visualization",tab_id="root_viz"),
+                        dbc.Tab(label="Conterfactual Effect",tab_id="counter_efffect"),
+                    ],
+                    id="tabs",
+                    active_tab="root_viz",
+                ),
+                html.Div(id="tab_content")
+            ],color="dark",outline=True),
+        )
+    ],justify="center")
 ],fluid=True)
 
 
