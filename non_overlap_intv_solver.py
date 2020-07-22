@@ -29,7 +29,8 @@ class DistributionHandler():
     mixture_samples=None   #dataframe containing the mixture samples
 
     #A cache to avoid computing the do distirubiton again and again
-    do_graph_cache={}
+    do_graph_cache=None     #Creating none so that they dont share across
+                            #instance of the object.
 
     def __init__(self,base_network,do_config,mixture_samples):
         self.base_network=base_network
@@ -40,6 +41,9 @@ class DistributionHandler():
             self._get_true_mixture_graph()
         #Intializing the mixture sample to estimate probability later
         self.mixture_samples=mixture_samples
+
+        #Initializing the cache
+        self.do_graph_cache={}
 
     def _get_true_mixture_graph(self,):
         '''
@@ -161,16 +165,16 @@ class DistributionHandler():
             eval_do[0]=tuple(eval_do[0])
             eval_do[1]=tuple(eval_do[1])
 
-            # if tuple(eval_do) in self.do_graph_cache:
-            #     do_graph=self.do_graph_cache[tuple(eval_do)]
-            #     # print(self.do_graph_cache)
-            # else:
-            #First of all we have to get the graph for this eval_do config
-            node_ids,cat_ids=eval_do
-            do_graph=self.base_network.do(node_ids,cat_ids)
+            if tuple(eval_do) in self.do_graph_cache:
+                do_graph=self.do_graph_cache[tuple(eval_do)]
+                # print(self.do_graph_cache)
+            else:
+                #First of all we have to get the graph for this eval_do config
+                node_ids,cat_ids=eval_do
+                do_graph=self.base_network.do(node_ids,cat_ids)
 
-                # #Now we will cache the do graph
-                # self.do_graph_cache[tuple(eval_do)]=do_graph
+                #Now we will cache the do graph
+                self.do_graph_cache[tuple(eval_do)]=do_graph
 
             prob=get_graph_sample_probability(do_graph,sample,
                                                 network_parameters,

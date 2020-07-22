@@ -372,15 +372,15 @@ def disentangle(graph_type,base_network,do_config,sample_size):
     if sample_size=="infinite":
         mixture_samples=None
         infinite_mix_sample=True
-    elif graph_type!="flipkart":
+    else:#elif graph_type!="flipkart":
         mixture_samples=base_network.generate_sample_from_mixture(
                                             do_config=do_config,
                                             sample_size=sample_size)
-    else:
-        #Now for flipkart when no going for infinite sample, we load the data
-        # raise NotImplementedError
-        mixpath="dataset/FlipkartDataset/Flipkart11Jul2019_clean.csv"
-        mixture_samples=load_flipkart_mixture_sample(mixpath,base_network)
+    # else:
+    #     #Now for flipkart when no going for infinite sample, we load the data
+    #     # raise NotImplementedError
+    #     mixpath="dataset/FlipkartDataset/Flipkart11Jul2019_clean.csv"
+    #     mixture_samples=load_flipkart_mixture_sample(mixpath,base_network)
     # pdb.set_trace()
 
     #Now lets solve the problem
