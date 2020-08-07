@@ -291,4 +291,4 @@ def render_root_viz_tab(graph_type,sample_size):
     return content
 
 if __name__=="__main__":
-    app.run_server(debug=True,port=8050)
+    app.run_server(debug=False,port=8050)
