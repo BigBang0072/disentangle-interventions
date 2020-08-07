@@ -13,7 +13,7 @@ import json
 from data_handle import *
 from non_overlap_intv_solver import *
 #Import code downloaded from other's github repo for directed edges in plotly
-from addEdge import addEdge
+# from addEdge import addEdge
 
 
 #Iniitaizing the global graph attributes
