@@ -75,10 +75,9 @@ class GraphGenerator():
         network = self._create_network_with_edges(adj_mat)
         self._add_cpds_to_network(network,node_card,adj_mat)
         network.check_model()
-        pdb.set_trace()
+        # pdb.set_trace()
 
-        #Now its time to save the network as bif file and return path
-
+        return network
 
     def _create_network_with_edges(self,adj_mat):
         #Creating the edge list
@@ -86,7 +85,7 @@ class GraphGenerator():
         for fro in range(adj_mat.shape[1]):
             for to in range(adj_mat.shape[0]):
                 if(adj_mat[to][fro]==1):
-                    edge_list.append((fro,to))
+                    edge_list.append((str(fro),str(to)))
 
         #Creating the base network
         network = BayesianModel(edge_list)
@@ -102,8 +101,8 @@ class GraphGenerator():
         The cardinality of each node is assumed to be same in this experiment.
         '''
         for node in network.nodes():
-            parents = [pidx for pidx in range(adj_mat.shape[1])
-                            if adj_mat[node][pidx]==1]
+            parents = [str(pidx) for pidx in range(adj_mat.shape[1])
+                            if adj_mat[int(node)][pidx]==1]
             #Getting the random CPD
             cpd_arr = self._generate_random_cpd(node_card,len(parents))
             # pdb.set_trace()
@@ -122,6 +121,9 @@ class GraphGenerator():
         #Sampling the CPD for each of the configuration of prents
         cpd = dirichlet.rvs(size=num_pa_config, alpha=dirch_alphas).T
 
+        assert abs(np.sum(cpd)-num_pa_config)<=1e-8,"CPD value error"
+        assert abs(np.sum(np.sum(cpd,axis=0)-1))<=1e-8,"Column CPD error"
+
         return cpd
 
 
@@ -131,16 +133,15 @@ if __name__=="__main__":
     num_graphs=1000
 
     #Creating the arguments for generator
-    args={}
-    args["scale_alpha"]=5
+    generator_args={}
+    generator_args["scale_alpha"]=5
 
     #Starting the generation process
-    graphGenerator = GraphGenerator(args)
-    graphGenerator.generate_bayesian_network(num_nodes=10,
+    graphGenerator = GraphGenerator(generator_args)
+    network = graphGenerator.generate_bayesian_network(num_nodes=10,
                                             node_card=3,
                                             num_edges=30,
-                                            graph_type="SF",
-                                            )
+                                            graph_type="SF")
     for idx in range(num_graphs):
         #Generating the graph
         graph_type = "SF" #if idx%2==0 else "ER"

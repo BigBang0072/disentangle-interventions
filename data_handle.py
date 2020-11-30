@@ -36,19 +36,17 @@ class BnNetwork():
     orphan_nodes=set()        #Set of nodes which no longer will have parent
 
     def __init__(self,modelpath):
-        #Reading the model from the file
-        reader=BIFReader(modelpath)
         #Initializing the base graph
         print("Initializing the base_graph")
-        self._initialize_base_graph(reader)
+        self._initialize_base_graph(modelpath)
+
         #Initializing the one hot variables
         self._get_one_hot_mapping()
 
-    def _initialize_base_graph(self,reader):
-        '''
-        This function will create the base distribution, have a hash of nodes
-        name and a numbering.
-        '''
+    def _read_model_bif(self,modelpath):
+        #Reading the model from the file
+        reader=BIFReader(modelpath)
+
         #Getting the base distributions
         base_graph=reader.get_model()
         base_graph.check_model()
@@ -64,6 +62,22 @@ class BnNetwork():
         self.states_i2c={key:{np.int32(idx):val for idx,val
                                                 in enumerate(kval)}
                             for key,kval in self.states.items()}
+
+        return base_graph,nodes,edges
+
+    def _initialize_base_graph(self,modelpath):
+        '''
+        This function will create the base distribution, have a hash of nodes
+        name and a numbering.
+        '''
+        if type(modelpath) is str:
+            #If we are given the bif file to read from
+            base_graph,nodes,edges = self._read_model_bif(modelpath)
+        else:
+            #If we are directly given an instance of the Bayesian Network
+            base_graph = modelpath
+            nodes = list(base_graph.nodes())
+            edges = list(base_graph.edges())
 
         #Getting the topological order and adjacency list
         adj_set=defaultdict(set)
@@ -508,6 +522,20 @@ if __name__=="__main__":
     graph_name="asia"
     modelpath="dataset/{}/{}.bif".format(graph_name,graph_name)
     network=BnNetwork(modelpath)
+    # pdb.set_trace()
+
+    #Creating the arguments for generator
+    from graph_generator import GraphGenerator
+    generator_args={}
+    generator_args["scale_alpha"]=5
+    #Starting the generation process
+    graphGenerator = GraphGenerator(generator_args)
+    modelpath = graphGenerator.generate_bayesian_network(num_nodes=10,
+                                            node_card=3,
+                                            num_edges=30,
+                                            graph_type="SF")
+    network=BnNetwork(modelpath)
+    # pdb.set_trace()
 
     #Testing internvention
     do_graph=network.do([3,4,1,5],[1,1,0,0])
@@ -522,16 +550,16 @@ if __name__=="__main__":
             ]
     samples=network.generate_sample_from_mixture(do_config,sample_size,
                                                     savepath)
-    # pdb.set_trace()
+    pdb.set_trace()
 
     #Testing the probability calculation function
-    prob=network.get_graph_sample_probability(network.base_graph,
-                                                samples.iloc[0])
+    # prob=network.get_graph_sample_probability(network.base_graph,
+    #                                             samples.iloc[0])
     # pdb.set_trace()
 
     #Testing the encoding and decoding function
-    sample_one_hot=network.encode_sample_one_hot(samples)
-    sample_prime=network.decode_sample_one_hot(sample_one_hot)
-    sample_prime=sample_prime[samples.columns]
-    assert samples.equals(sample_prime),"Encoded and Decoded data not same"
+    # sample_one_hot=network.encode_sample_one_hot(samples)
+    # sample_prime=network.decode_sample_one_hot(sample_one_hot)
+    # sample_prime=sample_prime[samples.columns]
+    # assert samples.equals(sample_prime),"Encoded and Decoded data not same"
     # pdb.set_trace()

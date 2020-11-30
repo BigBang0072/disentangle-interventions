@@ -5,3 +5,4 @@ temp
 *.DS_Store
 *.sh
 *.csv
+temp.py
