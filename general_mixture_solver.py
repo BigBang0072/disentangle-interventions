@@ -16,9 +16,13 @@ class GeneralMixtureSolver():
     infinite_sample_limit=None  #boolean to denote to simulate infinite sample
 
     def __init__(self,base_network,do_config,
-                infinite_sample_limit,mixture_samples):
+                infinite_sample_limit,mixture_samples,
+                pi_threshold):
         self.base_network=base_network
         self.infinite_sample_limit=infinite_sample_limit
+
+        #Ininitializing the minimum threshold for the mixing coefficient
+        self.pi_threshold=pi_threshold
 
         #Initializing the distirubiton handler
         self.dist_handler=DistributionHandler(base_network,
@@ -52,7 +56,23 @@ class GeneralMixtureSolver():
 
         #Starting finding the merged targets topologically
         for vidx in range(len(self.base_network.topo_i2n)):
-            v_bars,target_dict=self._split_all_targets(v_bars,vidx,target_dict)
+            print("=================================================")
+            print("\tSplitting for node:{}".format(vidx))
+            print("=================================================")
+            blacklisted_cidx,split_target_dict=\
+                        self._split_all_targets(v_bars,vidx,target_dict)
+
+            #Updating the v_bar for this node
+            print("Glabal blacklisted category node:{} cat:{}".format(vidx,
+                                                        blacklisted_cidx))
+            node_id=self.base_network.topo_i2n[vidx]
+            v_bars[node_id]=blacklisted_cidx
+
+            #Now aggregating the split targets into one
+            print("Aggregating the split target with the old ones")
+            self._aggregate_target_and_splits(vidx,target_dict,
+                                                split_target_dict)
+            print("Completed the splitting process for current node")
 
 
     def _split_all_targets(self,v_bars,vidx,target_dict):
@@ -67,11 +87,24 @@ class GeneralMixtureSolver():
         #Now we will go one by one in this order to split each of the target
         split_target_dict={}
         for tidx,tname in enumerate(tsorted_target_names):
+            print("Splitting target:{}".format(tname))
             #Getting the all the targets which have been split before
             before_target_names = tsorted_target_names[0:tidx]
-            self._split_target
 
+            #Splitting the current target by inserting the current node
+            split_pis=self._split_target(v_bars,vidx,tname,target_dict,
+                                            before_target_names,
+                                            split_target_dict)
+            #Adding the split solution for this target
+            split_target_dict[tname]=split_pis
+            print("#################################################")
 
+        #Thresholding the pis
+        self._threshold_split_pis(split_target_dict)
+        #Finding the global blacklist category for this node
+        blacklisted_cidx = self._get_global_blacklist_cidx(split_target_dict)
+
+        return blacklisted_cidx,split_target_dict
 
     def _get_targets_topologically(self,target_dict):
         '''
@@ -113,7 +146,7 @@ class GeneralMixtureSolver():
 
         return tsorted_target_names
 
-    def _split_target(self,v_bars,vidx,tidx,target_dict,before_target_names,split_target_dict):
+    def _split_target(self,v_bars,vidx,tname,target_dict,before_target_names,split_target_dict):
         '''
         This function will split the current "target:tidx" by instering
         different categories of "vidx" as intervention.
@@ -127,7 +160,7 @@ class GeneralMixtureSolver():
 
         '''
         #Getting the current target
-        curr_target = target_dict[tidx]
+        curr_target = target_dict[tname]
 
         #Now we will generate the system of equation for the current target
         node_id=self.base_network.topo_i2n[vidx]
@@ -135,6 +168,7 @@ class GeneralMixtureSolver():
         #Initializing the system matrix
         A=np.zeros((num_cats,num_cats),dtype=np.float64)
         b=np.zeros((num_cats,),dtype=np.float64)
+        small_a=np.zeros((num_cats,),dtype=np.float64)
 
         #First of all we have to get the vt_bars U t' for current target
         vbtut=self._get_vbtut(v_bars,curr_target)
@@ -160,14 +194,13 @@ class GeneralMixtureSolver():
             bpp = bp /p_ct_vbtut
 
             b[cidx] =bpp
+            small_a[cidx] = a
             A[cidx,:] = (-1*a)
             A[cidx,cidx] += 1
 
         #Now we are ready with our matrix
-
-
-
-
+        split_pis=self._solve_system_analytically(small_a,A,b)
+        return split_target_dict
 
     def _get_vbtut(self,v_bars,curr_target):
         '''
@@ -188,7 +221,7 @@ class GeneralMixtureSolver():
 
     def _get_bp(self,vbtut,node_id,cidx,target_dict,before_target_names,split_target_dict):
         '''
-        This function will calcuate the b'' for the current cateogy
+        This function will calcuate the b' for the current cateogy
         '''
         #Adding the current node to the rest of point
         point= vbtut.copy()
@@ -232,4 +265,142 @@ class GeneralMixtureSolver():
         #Now we are done with bpp
         return bpp
 
-    def
+    def _solve_system_analytically(self,small_a,A,b):
+        '''
+        This function will calculate the mixing coefficient for the possible
+        spliting of the target after adding the curent node as intervention
+        in the current target.
+
+        Stage 1:
+            1. First we will assume that, we will have one unique solution
+            2. In case we have mutiple solution (which we should not technically)
+                2.1 We will warn in the log
+                2.2 Select the solution which has minimum residual then
+            3. After getting the pi_s, we will threshold the small pi
+                and not let them split furthur based on some threshold
+                3.1 This threshold will be decided based on the actual/prior
+                    about the strength of intervention component in mixture
+            (This thresholding will be done )
+
+        Stage 2:
+            1. Here we will handle the case, if due to some error the line
+                is passsing from outside the solution simplex.
+            2. We will have to project the crossing over of the assumption
+                face=0, with the closest point in the solution simplex.
+
+        Assumption:
+            1. Following our positivity assumption, all out CPDs are also
+                positive. So no need to be concerned about the choosing
+                the k^th guy.
+        '''
+
+        #Trying one by one each of the category to be zero
+        feasible_solutions={}
+        feasible_score=[]
+        minimum_residual=float("inf")
+        selected_cidx=-1
+        for cidx in range(A.shape[0]):
+            #Getting the solution if this cidx is zero
+            split_pis = b - (small_a/small_a[cidx])*b[cidx]
+            #But the current cidx is taken as zero
+            split_pis[cidx]=0.0
+            #TODO: Possibly we could do thresholding here
+
+            #Adding this solution to list of feasible solution
+            feasible_solutions["cidx"]=split_pis
+
+            #Now checking the validity of this solution
+            if np.sum(split_pis>=0)==A.shape[0]:
+                #Getting the residual of the solution
+                residual = np.sum((np.matmul(A,split_pis)-b)**2)
+                feasible_score.append((cidx,residual))
+                print("feasible_solution:\t cidx:{}\t residual:{}".format(
+                                                            cidx,residual))
+
+                if residual<minimum_residual:
+                    minimum_residual=residual
+                    selected_cidx=cidx
+        print("selected cidx:{}\t residual:{}\t pis:{}\t".format(
+                                        selected_cidx,
+                                        minimum_residual,
+                                        feasible_solutions[selected_cidx]))
+
+        #So we have selected the solution with the minimum residual
+        return feasible_solutions[selected_cidx]
+
+    def _threshold_split_pis(self,split_target_dict):
+        '''
+        This function will threshold the split pis such that small pis
+        less than the threshold value is made zero, in order to have sparser
+        solution. This thresold value will generally come from the domain
+        knowledge based on the strength of the intervention targets.
+
+        eg. if all the intervention targets have coefficient>0.01
+            with confidence interveal over it as 0.005 then
+            a good threshold will be 0.005
+        '''
+        print("Threshold the split pis: pi_threshold:{}".format(
+                                                    self.pi_threshold))
+        for tname,split_pis in split_target_dict.items():
+            split_pis = split_pis*(split_pis>self.pi_threshold)
+            split_target_dict[tname]=split_pis
+            print("tname:{}\t thresholded_spi:{}".format(tname,split_pis))
+
+    def _get_global_blacklist_cidx(self,split_target_dict):
+        '''
+        This function will serach for the category which is zero coefficient
+        i.e not present in any of the thresholded split of any of the
+        targets.
+        '''
+        all_target_split_pis = np.stack(
+                                list(split_target_dict.values()),axis=0)
+
+        #Now lets serach for the cidx which is absent from all targets
+        sum_split_pis = np.sum(all_target_split_pis,axis=0)
+
+        blacklisted_cidx=None
+        for cidx in range(sum_split_pis.shape[0]):
+            if sum_split_pis[cidx]==0.0:
+                blacklisted_cidx =  cidx
+
+        assert blacklisted_cidx!=None,"No global missing category"
+
+        return blacklisted_cidx
+
+    def _aggregate_target_and_splits(self,vidx,target_dict,split_target_dict):
+        '''
+        This function will create new targets based on the split and
+        redistribute the pis from the old target to those newly splitted
+        targets.
+        '''
+        #Iterating over all the targets
+        new_target_dict={}
+        for tname,(tnode_idxs,tcat_idxs,tpi) in target_dict.items():
+            #Getting the split coefficients
+            split_pis = split_target_dict[tname]
+            for cidx,spi in enumerate(split_pis):
+                #Leaving out the categories which have zero coefficient
+                if spi==0.0:
+                    continue
+                #Adding the internvetion config
+                split_tnode_idxs = tnode_idxs.copy()
+                split_tcat_idxs = tcat_idxs.copy()
+                #Adding the split variabels on the base target config
+                split_tnode_idxs.append(vidx)
+                split_tcat_idxs.append(cidx)
+                split_tname = "t"+len(new_target_dict)+len(target_dict)
+
+                new_target_dict[split_tname] = [split_tnode_idxs,
+                                                split_tcat_idxs,
+                                                spi]
+
+            #Now we will remove the coefficient from tpi which is gone in split
+            tpi = tpi - np.sum(split_pis)
+            assert tpi>=0.0,"Splitting more than it could afford"
+            target_dict[tname][-1]=tpi
+
+        #Now its time to merge theold and new target dict
+        for tname,config in new_target_dict.items():
+            assert tname not in target_dict, "Target name already present"
+            target_dict[tname]=config
+        print("Retribution and Merging the split with the targets complete!")
