@@ -1,7 +1,8 @@
 import numpy as np
 import pdb
 from pprint import pprint
-from collection import defaultdict
+from collections import defaultdict
+from toposort import toposort_flatten
 
 from data_handle import BnNetwork
 from non_overlap_intv_solver import DistributionHandler
@@ -73,7 +74,8 @@ class GeneralMixtureSolver():
             self._aggregate_target_and_splits(vidx,target_dict,
                                                 split_target_dict)
             print("Completed the splitting process for current node")
-
+            print("Tragets Found:")
+            pprint(target_dict)
 
     def _split_all_targets(self,v_bars,vidx,target_dict):
         '''
@@ -83,6 +85,8 @@ class GeneralMixtureSolver():
         '''
         #First of all we have to get the topological ordering among the targets
         tsorted_target_names=self._get_targets_topologically(target_dict)
+        print("topologically_sorted_targets:")
+        pprint(tsorted_target_names)
 
         #Now we will go one by one in this order to split each of the target
         split_target_dict={}
@@ -129,9 +133,10 @@ class GeneralMixtureSolver():
         target_names=list(target_dict.keys())
         inv_adj_set=defaultdict(set)
         for iidx in range(0,len(target_names)):
+            tname1=target_names[iidx]
+            inv_adj_set[tname1]=set()
             for jidx in range(iidx+1,len(target_names)):
                 #Comparing the two targets
-                tname1=target_names[iidx]
                 tname2=target_names[jidx]
                 smallar_target=get_smallar_target(target_dict,tname1,tname2)
 
@@ -173,6 +178,7 @@ class GeneralMixtureSolver():
         #First of all we have to get the vt_bars U t' for current target
         vbtut=self._get_vbtut(v_bars,curr_target)
 
+        print("Getting the entries for the system of equation")
         for cidx in range(num_cats):
             #Calculate the b'' for this category
             bp = self._get_bp(vbtut,node_id,cidx,target_dict,
@@ -197,10 +203,12 @@ class GeneralMixtureSolver():
             small_a[cidx] = a
             A[cidx,:] = (-1*a)
             A[cidx,cidx] += 1
+            print("node_id:{}\tcidx:{}\ta:{}\tb:{}\t".format(
+                                                    node_id,cidx,a,bpp))
 
         #Now we are ready with our matrix
         split_pis=self._solve_system_analytically(small_a,A,b)
-        return split_target_dict
+        return split_pis
 
     def _get_vbtut(self,v_bars,curr_target):
         '''
@@ -233,7 +241,7 @@ class GeneralMixtureSolver():
 
         #Getting the mixture probability
         p_mix = self.dist_handler.get_mixture_probability(point,
-                                                    self.infinite_mix_sample)
+                                                    self.infinite_sample_limit)
         bpp = bpp + p_mix
 
         #Getting the old targets probability
@@ -307,7 +315,7 @@ class GeneralMixtureSolver():
             #TODO: Possibly we could do thresholding here
 
             #Adding this solution to list of feasible solution
-            feasible_solutions["cidx"]=split_pis
+            feasible_solutions[cidx]=split_pis
 
             #Now checking the validity of this solution
             if np.sum(split_pis>=0)==A.shape[0]:
@@ -375,6 +383,7 @@ class GeneralMixtureSolver():
         '''
         #Iterating over all the targets
         new_target_dict={}
+        spent_target_list=[]
         for tname,(tnode_idxs,tcat_idxs,tpi) in target_dict.items():
             #Getting the split coefficients
             split_pis = split_target_dict[tname]
@@ -388,7 +397,8 @@ class GeneralMixtureSolver():
                 #Adding the split variabels on the base target config
                 split_tnode_idxs.append(vidx)
                 split_tcat_idxs.append(cidx)
-                split_tname = "t"+len(new_target_dict)+len(target_dict)
+                split_tname = "t"+str(len(new_target_dict)\
+                                        +len(target_dict))
 
                 new_target_dict[split_tname] = [split_tnode_idxs,
                                                 split_tcat_idxs,
@@ -396,11 +406,44 @@ class GeneralMixtureSolver():
 
             #Now we will remove the coefficient from tpi which is gone in split
             tpi = tpi - np.sum(split_pis)
-            assert tpi>=0.0,"Splitting more than it could afford"
+            assert tpi>=(-1e-10),"Splitting more than it could afford"
+            #if we have given our complete mixing coefficent in splitting
+            if(tpi<self.pi_threshold):
+                spent_target_list.append(tname)
             target_dict[tname][-1]=tpi
+
+        #Removing the spent target from the old dict
+        for spent_target in spent_target_list:
+            del target_dict[spent_target]
 
         #Now its time to merge theold and new target dict
         for tname,config in new_target_dict.items():
             assert tname not in target_dict, "Target name already present"
             target_dict[tname]=config
         print("Retribution and Merging the split with the targets complete!")
+
+if __name__=="__main__":
+    #Creating a random graph
+    from graph_generator import GraphGenerator
+    generator_args={}
+    generator_args["scale_alpha"]=5
+    graphGenerator = GraphGenerator(generator_args)
+    modelpath = graphGenerator.generate_bayesian_network(num_nodes=10,
+                                            node_card=3,
+                                            num_edges=30,
+                                            graph_type="SF")
+    network=BnNetwork(modelpath)
+
+    #Testing the general mixture solver
+    do_config=[
+            [[0,],[1,],0.2],
+            [[1,],[2,],0.3],
+    ]
+    solver = GeneralMixtureSolver(
+                            base_network=network,
+                            do_config=do_config,
+                            infinite_sample_limit=True,
+                            mixture_samples=None,
+                            pi_threshold=0.01
+            )
+    solver.solve()
