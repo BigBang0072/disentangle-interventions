@@ -19,12 +19,17 @@ class GeneralMixtureSolver():
 
     def __init__(self,base_network,do_config,
                 infinite_sample_limit,mixture_samples,
-                pi_threshold):
+                pi_threshold,split_threshold):
         self.base_network=base_network
         self.infinite_sample_limit=infinite_sample_limit
 
         #Ininitializing the minimum threshold for the mixing coefficient
         self.pi_threshold=pi_threshold
+        #Threshold allows the old target to split "slightly" more than possible
+        self.split_threshold=split_threshold
+
+        #Initializing the global target count (for numbering targets)
+        self.global_target_counter=0
 
         #Initializing the distirubiton handler
         self.dist_handler=DistributionHandler(base_network,
@@ -55,6 +60,8 @@ class GeneralMixtureSolver():
         target_dict={
                 "t0":[[],[],1.0]
         }
+        #Updating the counter since we now have one target
+        self.global_target_counter=1
 
         #Starting finding the merged targets topologically
         for vidx in range(len(self.base_network.topo_i2n)):
@@ -112,6 +119,7 @@ class GeneralMixtureSolver():
             print("#################################################")
 
         #Finding the global blacklist category for this node
+        self._print_split_target_dict(split_target_dict)
         blacklisted_cidx = self._get_global_blacklist_cidx(split_target_dict)
 
         return blacklisted_cidx,split_target_dict
@@ -329,7 +337,7 @@ class GeneralMixtureSolver():
             #Adding this solution to list of feasible solution
             feasible_solutions[cidx]=split_pis
 
-            #Now checking the validity of this solution
+            #Now checking the validity of this solution (Stage 1: only one should go)
             if np.sum(split_pis>=0)==A.shape[0]:
                 #Getting the residual of the solution
                 residual = np.sum((np.matmul(A,split_pis)-b)**2)
@@ -420,20 +428,26 @@ class GeneralMixtureSolver():
                 #Adding the split variabels on the base target config
                 split_tnode_idxs.append(vidx)
                 split_tcat_idxs.append(cidx)
-                split_tname = "t"+str(len(new_target_dict)\
-                                        +len(target_dict))
+                split_tname = "t"+str(self.global_target_counter)
 
                 new_target_dict[split_tname] = [split_tnode_idxs,
                                                 split_tcat_idxs,
                                                 spi]
+                #Incrementing the global counter
+                self.global_target_counter+=1
 
             #Now we will remove the coefficient from tpi which is gone in split
             tpi = tpi - np.sum(split_pis)
-            assert tpi>=(-1e-10),"Splitting more than it could afford"
+            assert (tpi>=self.split_threshold),"Splitting more than it could afford"
             #if we have given our complete mixing coefficent in splitting
             if(tpi<self.pi_threshold):
                 spent_target_list.append(tname)
             target_dict[tname][-1]=tpi
+
+        print("old_target_dict:")
+        pprint(target_dict)
+        print("new_target_dict:")
+        pprint(new_target_dict)
 
         #Removing the spent target from the old dict
         for spent_target in spent_target_list:
@@ -445,13 +459,21 @@ class GeneralMixtureSolver():
             target_dict[tname]=config
         print("Retribution and Merging the split with the targets complete!")
 
+    def _print_split_target_dict(self,split_target_dict):
+        '''
+        Useful in visualizing the global blacklisted category for this node
+        among all the splitted targets
+        '''
+        for tname,split_pis in split_target_dict.items():
+            print("tname:{}\t thresholded_spi:{}".format(tname,split_pis))
+
 if __name__=="__main__":
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
     generator_args["scale_alpha"]=5
     graphGenerator = GraphGenerator(generator_args)
-    modelpath = graphGenerator.generate_bayesian_network(num_nodes=2,
+    modelpath = graphGenerator.generate_bayesian_network(num_nodes=10,
                                             node_card=3,
                                             num_edges=30,
                                             graph_type="SF")
@@ -460,14 +482,16 @@ if __name__=="__main__":
 
     #Testing the general mixture solver
     do_config=[
-            [[0,],[1,],0.2],
-            [[1,],[2,],0.3],
+            [[0,1,6,],[1,2,0,],0.2],
+            [[0,1,],[1,0,],0.1],
+            [[1,4,8,],[2,0,1,],0.3],
     ]
     solver = GeneralMixtureSolver(
                             base_network=network,
                             do_config=do_config,
                             infinite_sample_limit=True,
                             mixture_samples=None,
-                            pi_threshold=0.01
+                            pi_threshold=1e-5,
+                            split_threshold=(-1e-10),
             )
     solver.solve()
