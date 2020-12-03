@@ -1,4 +1,5 @@
 import numpy as np
+np.random.seed(1)
 import pdb
 from pprint import pprint
 from collections import defaultdict
@@ -94,17 +95,22 @@ class GeneralMixtureSolver():
             print("Splitting target:{}".format(tname))
             #Getting the all the targets which have been split before
             before_target_names = tsorted_target_names[0:tidx]
+            print("target_dict:")
+            pprint(target_dict)
+            print("before_target_names:")
+            pprint(before_target_names)
+            print("split_target_dict:")
+            pprint(split_target_dict)
 
             #Splitting the current target by inserting the current node
             split_pis=self._split_target(v_bars,vidx,tname,target_dict,
                                             before_target_names,
                                             split_target_dict)
-            #Adding the split solution for this target
+            #Adding the split solution for this target after thresholding
+            split_pis = self._threshold_split_pis(tname,split_pis)
             split_target_dict[tname]=split_pis
             print("#################################################")
 
-        #Thresholding the pis
-        self._threshold_split_pis(split_target_dict)
         #Finding the global blacklist category for this node
         blacklisted_cidx = self._get_global_blacklist_cidx(split_target_dict)
 
@@ -177,6 +183,8 @@ class GeneralMixtureSolver():
 
         #First of all we have to get the vt_bars U t' for current target
         vbtut=self._get_vbtut(v_bars,curr_target)
+        print("vbtut:")
+        pprint(vbtut)
 
         print("Getting the entries for the system of equation")
         for cidx in range(num_cats):
@@ -256,6 +264,9 @@ class GeneralMixtureSolver():
         #Now getting the already splitted targets contribution
         assert len(before_target_names)==len(split_target_dict),"Size mismatch"
         for btname in before_target_names:
+            #Getting the intervention location of this splitted target
+            tnode_idx,tcat_idx,_=target_dict[btname]
+
             #Getting the probability of vbtut
             p_t_vbtut = self.dist_handler.get_intervention_probability(
                                                 vbtut,
@@ -307,6 +318,7 @@ class GeneralMixtureSolver():
         feasible_score=[]
         minimum_residual=float("inf")
         selected_cidx=-1
+        print("Solving system analytically:")
         for cidx in range(A.shape[0]):
             #Getting the solution if this cidx is zero
             split_pis = b - (small_a/small_a[cidx])*b[cidx]
@@ -322,8 +334,8 @@ class GeneralMixtureSolver():
                 #Getting the residual of the solution
                 residual = np.sum((np.matmul(A,split_pis)-b)**2)
                 feasible_score.append((cidx,residual))
-                print("feasible_solution:\t cidx:{}\t residual:{}".format(
-                                                            cidx,residual))
+                print("cidx:{}\t residual:{}\t fpi:".format(
+                                                    cidx,residual,split_pis))
 
                 if residual<minimum_residual:
                     minimum_residual=residual
@@ -336,7 +348,7 @@ class GeneralMixtureSolver():
         #So we have selected the solution with the minimum residual
         return feasible_solutions[selected_cidx]
 
-    def _threshold_split_pis(self,split_target_dict):
+    def _threshold_split_pis(self,tname,split_pis):
         '''
         This function will threshold the split pis such that small pis
         less than the threshold value is made zero, in order to have sparser
@@ -346,13 +358,24 @@ class GeneralMixtureSolver():
         eg. if all the intervention targets have coefficient>0.01
             with confidence interveal over it as 0.005 then
             a good threshold will be 0.005
+
+        CHANGE-LOG:
+        Stage 0: We will threhsold the splitpis after we have done splitting
+                    all the individual targets at this level.
+
+        Stage 1: We will threshold the split pis before going to the other
+                    targets, since mistake here will contribute to other
+                    target bpp calculation and hence their split_pis.
+                    So better threshold right now instead of being done
+                    with all the target
         '''
         print("Threshold the split pis: pi_threshold:{}".format(
                                                     self.pi_threshold))
-        for tname,split_pis in split_target_dict.items():
-            split_pis = split_pis*(split_pis>self.pi_threshold)
-            split_target_dict[tname]=split_pis
-            print("tname:{}\t thresholded_spi:{}".format(tname,split_pis))
+
+        #Clipping the pi's to zero if they are below our threshold
+        split_pis = split_pis*(split_pis>self.pi_threshold)
+        print("tname:{}\t thresholded_spi:{}".format(tname,split_pis))
+        return split_pis
 
     def _get_global_blacklist_cidx(self,split_target_dict):
         '''
@@ -428,11 +451,12 @@ if __name__=="__main__":
     generator_args={}
     generator_args["scale_alpha"]=5
     graphGenerator = GraphGenerator(generator_args)
-    modelpath = graphGenerator.generate_bayesian_network(num_nodes=10,
+    modelpath = graphGenerator.generate_bayesian_network(num_nodes=2,
                                             node_card=3,
                                             num_edges=30,
                                             graph_type="SF")
     network=BnNetwork(modelpath)
+    # pdb.set_trace()
 
     #Testing the general mixture solver
     do_config=[
