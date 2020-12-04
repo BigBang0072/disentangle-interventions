@@ -482,9 +482,10 @@ if __name__=="__main__":
 
     #Testing the general mixture solver
     do_config=[
-            [[0,1,6,],[1,2,0,],0.2],
+            [[0,1,6,9,],[1,2,0,1,],0.2],
             [[0,1,],[1,0,],0.1],
             [[1,4,8,],[2,0,1,],0.3],
+            [[1,5,9,],[2,0,1,],0.3],
     ]
     solver = GeneralMixtureSolver(
                             base_network=network,
