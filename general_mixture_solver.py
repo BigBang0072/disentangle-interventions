@@ -7,6 +7,8 @@ from toposort import toposort_flatten
 
 from data_handle import BnNetwork
 from non_overlap_intv_solver import DistributionHandler
+from interventionGenerator import InterventionGenerator
+from evaluator import EvaluatePrediction
 
 class GeneralMixtureSolver():
     '''
@@ -84,6 +86,8 @@ class GeneralMixtureSolver():
             print("Completed the splitting process for current node")
             print("Tragets Found:")
             pprint(target_dict)
+
+        return target_dict
 
     def _split_all_targets(self,v_bars,vidx,target_dict):
         '''
@@ -468,25 +472,30 @@ class GeneralMixtureSolver():
             print("tname:{}\t thresholded_spi:{}".format(tname,split_pis))
 
 if __name__=="__main__":
+    num_nodes=10
+    node_card=3
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
     generator_args["scale_alpha"]=5
     graphGenerator = GraphGenerator(generator_args)
-    modelpath = graphGenerator.generate_bayesian_network(num_nodes=10,
-                                            node_card=3,
+    modelpath = graphGenerator.generate_bayesian_network(num_nodes=num_nodes,
+                                            node_card=node_card,
                                             num_edges=30,
                                             graph_type="SF")
     network=BnNetwork(modelpath)
     # pdb.set_trace()
 
+    #Getting a random internvetion
+    target_generator = InterventionGenerator(S=5,
+                                            max_nodes=num_nodes,
+                                            max_cat=node_card,
+                                            num_node_temperature=float("inf"),
+                                            pi_dist_type="inverse",
+                                            pi_alpha_scale=5)
+    do_config = target_generator.generate_all_targets()
     #Testing the general mixture solver
-    do_config=[
-            [[0,1,6,9,],[1,2,0,1,],0.2],
-            [[0,1,],[1,0,],0.1],
-            [[1,4,8,],[2,0,1,],0.3],
-            [[1,5,9,],[2,0,1,],0.3],
-    ]
+
     solver = GeneralMixtureSolver(
                             base_network=network,
                             do_config=do_config,
@@ -495,4 +504,8 @@ if __name__=="__main__":
                             pi_threshold=1e-5,
                             split_threshold=(-1e-10),
             )
-    solver.solve()
+    pred_target_dict=solver.solve()
+
+    #Now lets evaluate the solution
+    evaluator = EvaluatePrediction(matching_weight=0.5)
+    evaluator.get_evaluation_scores(pred_target_dict,do_config)

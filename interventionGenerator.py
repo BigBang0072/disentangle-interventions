@@ -78,6 +78,7 @@ class InterventionGenerator():
 
         print("Tragets Generated:")
         pprint(target_dict)
+        return list(target_dict.values())
 
     def _generate_target_loc(self,blist_cats):
         '''

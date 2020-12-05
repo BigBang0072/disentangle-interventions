@@ -165,10 +165,10 @@ if __name__=="__main__":
         [[0,1],[1,2],0.3]
     ]
     pred_target_dict={
-        "t0":[[],[],0.7],
-        "t1":[[0,1],[1,2],0.3]
+        "t0":[[],[],0.6],
+        "t1":[[0,],[2,],0.2]
     }
 
     #Now initializing our solver
-    evaluator = EvaluatePrediction(matching_weight=0.1)
+    evaluator = EvaluatePrediction(matching_weight=0.5)
     evaluator.get_evaluation_scores(pred_target_dict,do_config)
