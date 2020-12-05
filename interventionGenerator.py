@@ -155,7 +155,8 @@ if __name__=="__main__":
                                             max_nodes=5,
                                             max_cat=3,
                                             num_node_temperature=float("inf"),
-                                            pi_dist_type="uniform",
+                                            pi_dist_type="inverse",
                                             pi_alpha_scale=5)
-    target_generator.generate_all_targets()
+    for idx in range(1000):
+        target_generator.generate_all_targets()
     # target_generator.generate_all_targets()

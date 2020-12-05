@@ -11,7 +11,12 @@ class GeneralMixtureJobber():
             1.4 num_edges   *4
             1.5 scale_alpha *4
 
-        2. Generate Random Mixture of Intervention
+        2. Generate Random Intervention
+            2.1 Sparsity
+            2.2 num of nodes in a target temperature
+            2.3 
+
+        3. Generate Random Mixture of Intervention
             2.1 Sparsity    [See how sample size varies this]
             2.1 Sample Size [actual metric of variation]
 
