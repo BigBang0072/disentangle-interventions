@@ -1,6 +1,7 @@
 import igraph as ig
 import networkx as nx
 import numpy as np
+np.random.seed(1)
 import pdb
 from pgmpy.models import BayesianModel
 from pgmpy.factors.discrete.CPD import TabularCPD

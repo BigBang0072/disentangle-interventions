@@ -121,6 +121,7 @@ class GeneralMixtureSolver():
             split_pis = self._threshold_split_pis(tname,split_pis)
             split_target_dict[tname]=split_pis
             print("#################################################")
+            # pdb.set_trace()
 
         #Finding the global blacklist category for this node
         self._print_split_target_dict(split_target_dict)
@@ -149,12 +150,11 @@ class GeneralMixtureSolver():
 
         #Generating the inverted adjacency list
         target_names=list(target_dict.keys())
-        inv_adj_set=defaultdict(set)
+        inv_adj_set={tname:set() for tname in target_names}
         for iidx in range(0,len(target_names)):
-            tname1=target_names[iidx]
-            inv_adj_set[tname1]=set()
             for jidx in range(iidx+1,len(target_names)):
                 #Comparing the two targets
+                tname1=target_names[iidx]
                 tname2=target_names[jidx]
                 smallar_target=get_smallar_target(target_dict,tname1,tname2)
 
@@ -165,6 +165,7 @@ class GeneralMixtureSolver():
                     #There is an arrow from tname2 to tname1
                     inv_adj_set[tname1].add(tname2)
         #Now we will get the topological order among the targets
+        # pdb.set_trace()
         tsorted_target_names=toposort_flatten(inv_adj_set)
 
         return tsorted_target_names
@@ -487,7 +488,7 @@ if __name__=="__main__":
     # pdb.set_trace()
 
     #Getting a random internvetion
-    target_generator = InterventionGenerator(S=5,
+    target_generator = InterventionGenerator(S=6,
                                             max_nodes=num_nodes,
                                             max_cat=node_card,
                                             num_node_temperature=float("inf"),
