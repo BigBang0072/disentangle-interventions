@@ -118,7 +118,8 @@ class GeneralMixtureSolver():
                                             before_target_names,
                                             split_target_dict)
             #Adding the split solution for this target after thresholding
-            split_pis = self._threshold_split_pis(tname,split_pis)
+            split_pis = self._renormalize_threshold_split_pis(tname,
+                                                    split_pis,target_dict)
             split_target_dict[tname]=split_pis
             print("#################################################")
             # pdb.set_trace()
@@ -361,7 +362,7 @@ class GeneralMixtureSolver():
         #So we have selected the solution with the minimum residual
         return feasible_solutions[selected_cidx]
 
-    def _threshold_split_pis(self,tname,split_pis):
+    def _renormalize_threshold_split_pis(self,tname,split_pis,target_dict):
         '''
         This function will threshold the split pis such that small pis
         less than the threshold value is made zero, in order to have sparser
@@ -381,13 +382,32 @@ class GeneralMixtureSolver():
                     target bpp calculation and hence their split_pis.
                     So better threshold right now instead of being done
                     with all the target
+
+        Stage 2: Now, since we could be splitting more than whatever possible
+                    we will have to renormalize the spit pis:
+
+                    If we are overshooting:
+                    [split_pi/sum(split_pi)]*pi_actual
+
+                    But should we renormalize again after we have thresholded
+                    for any understrength which could occur in the pi_left?
+
+                    It's debatable that we are rescaling i.e keeping the sol
+                    direction same, instead of projecting into the right
+                    direction. We could see that in next change.
+
+
         '''
+        print("Renormalizing the split pis if overshooting or understrength")
+        split_pis = self._renormalize_split_pis(tname,split_pis,target_dict)
+
+
         print("Threshold the split pis: pi_threshold:{}".format(
                                                     self.pi_threshold))
-
         #Clipping the pi's to zero if they are below our threshold
         split_pis = split_pis*(split_pis>self.pi_threshold)
         print("tname:{}\t thresholded_spi:{}".format(tname,split_pis))
+
         return split_pis
 
     def _get_global_blacklist_cidx(self,split_target_dict):
@@ -395,6 +415,10 @@ class GeneralMixtureSolver():
         This function will serach for the category which is zero coefficient
         i.e not present in any of the thresholded split of any of the
         targets.
+        Change LOG:
+        1. Now even if we dont have a global blacklist, we will forcefully
+            make a particular cidx as zero based on the minimum sum in the
+            particular column of the split_pis.
         '''
         all_target_split_pis = np.stack(
                                 list(split_target_dict.values()),axis=0)
@@ -403,11 +427,19 @@ class GeneralMixtureSolver():
         sum_split_pis = np.sum(all_target_split_pis,axis=0)
 
         blacklisted_cidx=None
+        sum_voilation=float("inf")
         for cidx in range(sum_split_pis.shape[0]):
-            if sum_split_pis[cidx]==0.0:
+            #Checking if the current columns has minimum sum voilations
+            if sum_split_pis[cidx]<sum_voilation:
                 blacklisted_cidx =  cidx
-
+                sum_voilation = sum_split_pis[cidx]
+            print("cidx:{} \tsum_voilation:{}".format(cidx,sum_split_pis[cidx]))
         assert blacklisted_cidx!=None,"No global missing category"
+
+        #Now we will make that particular column explicitely zero
+        for tname in split_target_dict.keys():
+            #Making that particular column as zero
+            split_target_dict[tname][blacklisted_cidx]=0.0
 
         return blacklisted_cidx
 
@@ -423,6 +455,9 @@ class GeneralMixtureSolver():
         for tname,(tnode_idxs,tcat_idxs,tpi) in target_dict.items():
             #Getting the split coefficients
             split_pis = split_target_dict[tname]
+            #Frist of all let's correct if there is some understrength
+            split_pis = self._renormalize_split_pis(tname,split_pis,target_dict)
+
             for cidx,spi in enumerate(split_pis):
                 #Leaving out the categories which have zero coefficient
                 if spi==0.0:
@@ -472,6 +507,36 @@ class GeneralMixtureSolver():
         for tname,split_pis in split_target_dict.items():
             print("tname:{}\t thresholded_spi:{}".format(tname,split_pis))
 
+    def _renormalize_split_pis(self,tname,split_pis,target_dict):
+        '''
+        Now, since we could be splitting more than whatever possible
+        we will have to renormalize the spit pis:
+
+        If we are overshooting:
+        [split_pi/sum(split_pi)]*pi_actual
+
+        It's debatable that we are rescaling i.e keeping the sol
+        direction same, instead of projecting into the right
+        direction. We could see that in next change.
+        '''
+        #Now we will renormalize the pis if we are oversplitting
+        target_pi = target_dict[tname][-1]
+        sum_split_pis  = np.sum(split_pis)
+        #Case 1 : If we are oversplitting
+        if(sum_split_pis>target_pi):
+            #Scale Down (overshooting)
+            #Automatically this will render the target_pi_left zero in aggregation step
+            split_pis = (split_pis/sum_split_pis)*target_pi
+            print("tname:{}\t downscaled_spi:{}".format(tname,split_pis))
+        elif( (target_pi-sum_split_pis) < self.pi_threshold ):
+            #Scale Up (understrength)
+            #Then we will make this target_pi_left as zero by redistributing again
+            split_pis = (split_pis/sum_split_pis)*target_pi
+            #Other wise we are in happy flow and have to do nothing
+            print("tname:{}\t upscaling_spi:{}".format(tname,split_pis))
+
+        return split_pis
+
 if __name__=="__main__":
     num_nodes=10
     node_card=3
@@ -484,25 +549,34 @@ if __name__=="__main__":
                                             node_card=node_card,
                                             num_edges=30,
                                             graph_type="SF")
-    network=BnNetwork(modelpath)
+    base_network=BnNetwork(modelpath)
     # pdb.set_trace()
 
     #Getting a random internvetion
-    target_generator = InterventionGenerator(S=6,
+    target_generator = InterventionGenerator(S=5,
                                             max_nodes=num_nodes,
                                             max_cat=node_card,
                                             num_node_temperature=float("inf"),
                                             pi_dist_type="inverse",
                                             pi_alpha_scale=5)
     do_config = target_generator.generate_all_targets()
-    #Testing the general mixture solver
 
+    #Testing by having the sample from mixture distribution
+    infinite_sample_limit=False
+    mixture_samples=None
+    if not infinite_sample_limit:
+        mixture_sample_size=100000
+        mixture_samples = base_network.generate_sample_from_mixture(
+                                            do_config=do_config,
+                                            sample_size=mixture_sample_size)
+
+    #Testing the general mixture solver
     solver = GeneralMixtureSolver(
-                            base_network=network,
+                            base_network=base_network,
                             do_config=do_config,
-                            infinite_sample_limit=True,
-                            mixture_samples=None,
-                            pi_threshold=1e-5,
+                            infinite_sample_limit=infinite_sample_limit,
+                            mixture_samples=mixture_samples,
+                            pi_threshold=1e-2,
                             split_threshold=(-1e-10),
             )
     pred_target_dict=solver.solve()
