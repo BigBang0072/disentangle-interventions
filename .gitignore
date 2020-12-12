@@ -6,3 +6,4 @@ temp
 *.sh
 *.csv
 temp.py
+*.json
