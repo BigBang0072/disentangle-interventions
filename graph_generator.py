@@ -81,6 +81,13 @@ class GraphGenerator():
         return network
 
     def _create_network_with_edges(self,adj_mat):
+        #Initializing the empty Bayesian model
+        network = BayesianModel()
+
+        #Adding the node to the model first
+        nodes_list=[str(idx) for idx in range(adj_mat.shape[0])]
+        network.add_nodes_from(nodes_list)
+
         #Creating the edge list
         edge_list=[]
         for fro in range(adj_mat.shape[1]):
@@ -88,8 +95,9 @@ class GraphGenerator():
                 if(adj_mat[to][fro]==1):
                     edge_list.append((str(fro),str(to)))
 
-        #Creating the base network
-        network = BayesianModel(edge_list)
+        #Adding the edges to the network
+        network.add_edges_from(edge_list)
+
         return network
 
     def _add_cpds_to_network(self,network,node_card,adj_mat):
