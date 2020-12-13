@@ -6,7 +6,7 @@ This repository contains the code corresponding to the work done at the research
 1. Checkout the correct branch with ```` git checkout general_mixture ````
 2. First install all the dependencies using ```` pip install -r requirements.txt ````
 3. Now to start the experiments and visualizing results:
-	1. ```` python jobber.py ```` : For starting the experiment jobs. Please change the **experiment_id** in the main folder to avoid overwriting the result of old experiment. This will run **(num_cpu/2)** parallel processes.
+	1. ```` python jobber.py ```` : For starting the experiment jobs. Please change the **experiment_id** in the main function to avoid overwriting the result of old experiment. This will run **(num_cpu/2)** parallel processes.
   		* The ````__main__ ```` function contains all the experiment configuration. 
 		* Please change following fields to add more experiments:
 			* **graph_type** : ["ER", " SF"] supported (Erdos-Reneyi and Scale-Free)
