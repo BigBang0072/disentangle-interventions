@@ -80,8 +80,8 @@ class BnNetwork():
             edges = list(base_graph.edges())
 
         #Getting the topological order and adjacency list
-        adj_set=defaultdict(set)
-        inv_adj_set=defaultdict(set)
+        adj_set={node:set() for node in nodes}
+        inv_adj_set={node:set() for node in nodes}
         in_degree={node:0 for node in nodes}
         for fr,to in edges:
             adj_set[fr].add(to)
@@ -198,7 +198,7 @@ class BnNetwork():
         #Now we will sample from the base distribution
         _,_,pis=zip(*do_config)
         phi=1-sum(pis)
-        assert phi>=0,"Illegal mixture Distribtuion"
+        assert phi>=(-1e-10),"Illegal mixture Distribtuion"
         if int(sample_size*phi)>0:
             sampler=BayesianModelSampling(self.base_graph)
             samples=sampler.forward_sample(size=int(sample_size*phi),
