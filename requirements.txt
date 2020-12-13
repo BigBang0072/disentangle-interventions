@@ -5,3 +5,4 @@ dash
 dash-cytoscape==0.0.5
 dash-bootstrap-components
 itertools
+python-igraph

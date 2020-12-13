@@ -130,7 +130,7 @@ class GeneralMixtureJobber():
         )
 
         #Running the jobs
-        num_cpu = mp.cpu_count()/2
+        num_cpu = mp.cpu_count()//2
         with mp.Pool(num_cpu) as p:
             job_results = p.map(jobber,problem_list)
         return job_results
@@ -262,7 +262,7 @@ if __name__=="__main__":
     #Initializing the sample distribution
     mixture_args={}
     mixture_args["mixture_sample_size"]=[1000,10000,100000,float("inf")]
-    mixture_args["pi_threshold_scale"]=[0.25,0.5,1] #to be multipled by (1/S)
+    mixture_args["pi_threshold_scale"]=[0.25,0.5,1] #to be multipled by (1/|S|)
     mixture_args["split_threshold"]=[-1e-10]
 
     #Evaluation args

@@ -42,7 +42,7 @@ class Plotter():
         expt_df = pd.DataFrame(self.all_expt_json)
         print("Size of Expt_df:{}".format(expt_df.shape))
         print(expt_df.head())
-        pdb.set_trace()
+        # pdb.set_trace()
 
         #Getting the unique sample sizes
         sample_sizes=expt_df.mixture_sample_size.unique()
