@@ -98,7 +98,13 @@ class InterventionGenerator():
         print("tnodes:{}".format(tnodes))
         print("tcats:{}".format(tcats))
 
-        return (tuple(tnodes),tuple(tcats))
+        #Lets sort the nodes and category to be civilized
+        target_loc = list(zip(tnodes,tcats))
+        target_loc.sort(key=lambda x: x[0])
+        #Now lets unzip out nodes
+        tnodes,tcats = zip(*target_loc)
+
+        return (tnodes,tcats)
 
     def _get_num_node_in_target(self,temperature):
         '''
