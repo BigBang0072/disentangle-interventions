@@ -538,8 +538,8 @@ class GeneralMixtureSolver():
         return split_pis
 
 if __name__=="__main__":
-    num_nodes=5
-    node_card=3
+    num_nodes=16
+    node_card=8
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
@@ -547,13 +547,13 @@ if __name__=="__main__":
     graphGenerator = GraphGenerator(generator_args)
     modelpath = graphGenerator.generate_bayesian_network(num_nodes=num_nodes,
                                             node_card=node_card,
-                                            num_edges=30,
+                                            num_edges=53,
                                             graph_type="SF")
     base_network=BnNetwork(modelpath)
     # pdb.set_trace()
 
     #Getting a random internvetion
-    target_generator = InterventionGenerator(S=5,
+    target_generator = InterventionGenerator(S=50,
                                             max_nodes=num_nodes,
                                             max_cat=node_card,
                                             num_node_temperature=float("inf"),
@@ -562,10 +562,10 @@ if __name__=="__main__":
     do_config = target_generator.generate_all_targets()
 
     #Testing by having the sample from mixture distribution
-    infinite_sample_limit=False
+    infinite_sample_limit=True
     mixture_samples=None
     if not infinite_sample_limit:
-        mixture_sample_size=1000
+        mixture_sample_size=100000
         mixture_samples = base_network.generate_sample_from_mixture(
                                             do_config=do_config,
                                             sample_size=mixture_sample_size)
@@ -576,7 +576,7 @@ if __name__=="__main__":
                             do_config=do_config,
                             infinite_sample_limit=infinite_sample_limit,
                             mixture_samples=mixture_samples,
-                            pi_threshold=5e-2,
+                            pi_threshold=1e-10,
                             split_threshold=(-1e-10),
             )
     pred_target_dict=solver.solve()

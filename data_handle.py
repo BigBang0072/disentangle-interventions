@@ -334,7 +334,7 @@ class BnNetwork():
             child_conn.close()
 
         #Now we will create multiple workers to parallelize
-        njobs=multiprocessing.cpu_count()-2
+        njobs=multiprocessing.cpu_count()/2
         num_per_job=int(np.ceil((input_samples.shape[0]*1.0)/njobs))
         process_pipe_list=[]
         process_list=[]
