@@ -42,7 +42,7 @@ class Plotter():
         expt_df = pd.DataFrame(self.all_expt_json)
         print("Size of Expt_df:{}".format(expt_df.shape))
         print(expt_df.head())
-        pdb.set_trace()
+        # pdb.set_trace()
 
         #Getting the unique sample sizes
         sample_sizes=expt_df.mixture_sample_size.unique()
@@ -109,16 +109,19 @@ class Plotter():
         fig, ax = plt.subplots(1,2)
 
         #Plotting the JS
-        self._plot_on_one_axis(ax[0],sample_sizes,js_dict,gratio_dict,True)
+        self._plot_on_one_axis(ax[0],sample_sizes,js_dict,gratio_dict,True,
+                                                            group_criteria)
         #Plotting the mse
-        self._plot_on_one_axis(ax[1],sample_sizes,mse_dict,gratio_dict,False)
+        self._plot_on_one_axis(ax[1],sample_sizes,mse_dict,gratio_dict,False,
+                                                            group_criteria)
 
         fig.suptitle("Evaluation Metrics with level-curve wrt : {}".format(
                                                             group_criteria))
         plt.show()
 
 
-    def _plot_on_one_axis(self,ax,sample_sizes,metric_dict,gratio_dict,is_js):
+    def _plot_on_one_axis(self,ax,sample_sizes,metric_dict,gratio_dict,is_js,
+                            group_criteria):
         #One by one plotting each of the level curve for each of group id
         xval = list(range(len(sample_sizes)))
         for gname in metric_dict.keys():
@@ -128,7 +131,9 @@ class Plotter():
             yerr = [variation_dict["std"][size]/2 for size in sample_sizes]
 
             #preparing the level-curve name
-            curve_name = "level={0:} : expt_ratio={1:0.2f}".format(gname,
+            curve_name = "{0:}={1:} : expt_ratio={2:0.2f}".format(
+                                                        group_criteria,
+                                                        gname,
                                                         gratio_dict[gname])
 
 
@@ -144,7 +149,7 @@ class Plotter():
         #Setting the title for the y-axis
         if is_js:
             ax.legend(loc="upper left")
-            ax.set_ylim(0,1)
+            ax.set_ylim(0,1.2)
             ax.set_ylabel("Average Weighted-Jaccard-Similarity")
         else:
             ax.legend(loc="upper right")
@@ -155,6 +160,6 @@ class Plotter():
 
 
 if __name__=="__main__":
-    experiment_id="exp2"
+    experiment_id="gasinha-exp1"
     plotter = Plotter(experiment_id)
-    plotter.plot_evaluation_metrics(group_criteria="pi_threshold_scale")
+    plotter.plot_evaluation_metrics(group_criteria="graph_type")

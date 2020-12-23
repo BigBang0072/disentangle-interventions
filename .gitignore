@@ -7,3 +7,4 @@ temp
 *.csv
 temp.py
 *.json
+*.gz
