@@ -130,19 +130,18 @@ class GeneralMixtureJobber():
         )
 
         #Running the jobs
-        num_cpu = mp.cpu_count()/2
+        num_cpu = mp.cpu_count()//2
         with mp.Pool(num_cpu) as p:
             job_results = p.map(jobber,problem_list)
         return job_results
 
 def jobber(problem_args):
-    return jobber_runner(problem_args)
-    # try:
-    #     return jobber_runner(problem_args)
-    # except:
-    #     pdb.set_trace()
-    #     print("Job terminated wrongly:")
-    #     pprint(problem_args)
+    # return jobber_runner(problem_args)
+    try:
+        return jobber_runner(problem_args)
+    except:
+        print("Job terminated wrongly:")
+        pprint(problem_args)
 
     return None
 
@@ -246,23 +245,23 @@ if __name__=="__main__":
     #Initializing the graph args
     graph_args={}
     graph_args["graph_type"]=["ER","SF"]
-    graph_args["num_nodes"]=[4,16]
-    graph_args["node_card"]=[2,8]
+    graph_args["num_nodes"]=[4,8,16]
+    graph_args["node_card"]=[2,4,8]
     graph_args["num_edges_dist"]=["uniform"] #dist to sample edge from
-    graph_args["num_edge_sample"]=[2] #number of random edge per config
-    graph_args["scale_alpha"]=[2,8]
+    graph_args["num_edge_sample"]=[3] #number of random edge per config
+    graph_args["scale_alpha"]=[2,4,8]
 
     #Initializing the sparsity args
     interv_args={}
-    interv_args["sparsity"]=[4,16]
-    interv_args["num_node_T"]=[10,float("inf")]
+    interv_args["sparsity"]=[4,16,32]
+    interv_args["num_node_T"]=[10,1000,float("inf")]
     interv_args["pi_dist_type"]=["uniform","inverse"]
-    interv_args["pi_alpha_scale"]=[2,8]
+    interv_args["pi_alpha_scale"]=[2,8,16]
 
     #Initializing the sample distribution
     mixture_args={}
     mixture_args["mixture_sample_size"]=[1000,10000,100000,float("inf")]
-    mixture_args["pi_threshold_scale"]=[0.25,0.5,1] #to be multipled by (1/S)
+    mixture_args["pi_threshold_scale"]=[0.25,0.5,1] #to be multipled by (1/|S|)
     mixture_args["split_threshold"]=[-1e-10]
 
     #Evaluation args
