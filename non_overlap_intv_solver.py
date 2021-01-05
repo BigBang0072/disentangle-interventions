@@ -32,8 +32,16 @@ class DistributionHandler():
     do_graph_cache=None     #Creating none so that they dont share across
                             #instance of the object.
 
-    def __init__(self,base_network,do_config,mixture_samples):
-        self.base_network=base_network
+    def __init__(self,base_network,do_config,mixture_samples,infinite_sample_limit):
+        #Relearning the base network parameters in case of finite sample limit
+        if infinite_sample_limit:
+            self.base_network=base_network
+        else:
+            self.base_network=self._relearn_network_cpds_from_sample(
+                                        mixture_samples.shape[0],
+                                        base_network,
+            )
+        #Initializing the do config
         self.do_config=do_config
 
         #Initialize the true mixture components (will simulate infinite data)
@@ -44,6 +52,37 @@ class DistributionHandler():
 
         #Initializing the cache
         self.do_graph_cache={}
+
+    def _relearn_network_cpds_from_sample(self,num_samples,base_network):
+        '''
+        This function will generate sample from the base distribution and
+        then relearn the base graph's CPD in order to simulate the working
+        with sample scenario.
+        '''
+        assert num_samples!=len(base_network.topo_i2n),"Give num of samples"
+        #First of all generating the samples
+        base_samples = base_network.generate_sample_from_mixture(
+                                        do_config=[
+                                                    [[],[],1.0]
+                                            ],
+                                        sample_size=num_samples,
+        )
+        # pdb.set_trace()
+
+        #Getting the sate name for each of nodes
+        nodes_card = base_network.base_graph.get_cardinality()
+        state_names= {name:set(range(card)) for name,card in nodes_card.items()}
+
+        #Removing the previous CPDs from the graph
+        [base_network.base_graph.remove_cpds(name) for name in state_names.keys()]
+        assert len(base_network.base_graph.get_cpds())==0,"CPD not removed"
+
+        #Now we will relearn the base graph's CPDS from these samples
+        base_network.base_graph.fit(base_samples,state_names=state_names)
+        assert len(base_network.base_graph.get_cpds())==len(nodes_card),"CPD not added"
+
+        #Now we have update the base network
+        return base_network
 
     def _get_true_mixture_graph(self,):
         '''

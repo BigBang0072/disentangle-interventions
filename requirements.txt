@@ -1,6 +1,6 @@
+pandas==0.20.3
 pgmpy==0.1.7
 toposort
-tensorflow==2.1.0
 dash
 dash-cytoscape==0.0.5
 dash-bootstrap-components

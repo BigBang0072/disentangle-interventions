@@ -36,7 +36,8 @@ class GeneralMixtureSolver():
         #Initializing the distirubiton handler
         self.dist_handler=DistributionHandler(base_network,
                                             do_config,
-                                            mixture_samples)
+                                            mixture_samples,
+                                            infinite_sample_limit)
 
     def solve(self,):
         '''
@@ -538,8 +539,8 @@ class GeneralMixtureSolver():
         return split_pis
 
 if __name__=="__main__":
-    num_nodes=16
-    node_card=8
+    num_nodes=4
+    node_card=3
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
@@ -547,13 +548,13 @@ if __name__=="__main__":
     graphGenerator = GraphGenerator(generator_args)
     modelpath = graphGenerator.generate_bayesian_network(num_nodes=num_nodes,
                                             node_card=node_card,
-                                            num_edges=53,
+                                            num_edges=8,
                                             graph_type="SF")
     base_network=BnNetwork(modelpath)
     # pdb.set_trace()
 
     #Getting a random internvetion
-    target_generator = InterventionGenerator(S=50,
+    target_generator = InterventionGenerator(S=16,
                                             max_nodes=num_nodes,
                                             max_cat=node_card,
                                             num_node_temperature=float("inf"),
@@ -562,10 +563,10 @@ if __name__=="__main__":
     do_config = target_generator.generate_all_targets()
 
     #Testing by having the sample from mixture distribution
-    infinite_sample_limit=True
+    infinite_sample_limit=False
     mixture_samples=None
     if not infinite_sample_limit:
-        mixture_sample_size=100000
+        mixture_sample_size=10000
         mixture_samples = base_network.generate_sample_from_mixture(
                                             do_config=do_config,
                                             sample_size=mixture_sample_size)
