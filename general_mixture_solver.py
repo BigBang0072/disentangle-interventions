@@ -21,7 +21,7 @@ class GeneralMixtureSolver():
 
     def __init__(self,base_network,do_config,
                 infinite_sample_limit,mixture_samples,
-                pi_threshold,split_threshold):
+                pi_threshold,split_threshold,positivity_epsilon):
         self.base_network=base_network
         self.infinite_sample_limit=infinite_sample_limit
 
@@ -37,7 +37,8 @@ class GeneralMixtureSolver():
         self.dist_handler=DistributionHandler(base_network,
                                             do_config,
                                             mixture_samples,
-                                            infinite_sample_limit)
+                                            infinite_sample_limit,
+                                            positivity_epsilon)
 
     def solve(self,):
         '''
@@ -539,8 +540,8 @@ class GeneralMixtureSolver():
         return split_pis
 
 if __name__=="__main__":
-    num_nodes=4
-    node_card=3
+    num_nodes=12
+    node_card=5
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
@@ -548,7 +549,7 @@ if __name__=="__main__":
     graphGenerator = GraphGenerator(generator_args)
     modelpath = graphGenerator.generate_bayesian_network(num_nodes=num_nodes,
                                             node_card=node_card,
-                                            num_edges=8,
+                                            num_edges=50,
                                             graph_type="SF")
     base_network=BnNetwork(modelpath)
     # pdb.set_trace()
@@ -577,8 +578,9 @@ if __name__=="__main__":
                             do_config=do_config,
                             infinite_sample_limit=infinite_sample_limit,
                             mixture_samples=mixture_samples,
-                            pi_threshold=1e-10,
+                            pi_threshold=(1/16.0)*(0.25),
                             split_threshold=(-1e-10),
+                            positivity_epsilon=1.0/mixture_sample_size,
             )
     pred_target_dict=solver.solve()
 

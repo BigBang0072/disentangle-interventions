@@ -107,8 +107,10 @@ class GeneralMixtureJobber():
         '''
         edge_sample=None
         if num_dist=="uniform":
-            max_edges = (num_nodes*(num_nodes-1))//2
-            edge_sample = np.random.randint(1,high=max_edges,
+            #max_edges = (num_nodes*(num_nodes-1))//2
+            min_edges = 1*num_nodes
+            max_edges = 5*num_nodes
+            edge_sample = np.random.randint(min_edges,high=max_edges,
                                                 size=num_sample)
         else:
             raise NotImplementedError
@@ -203,17 +205,24 @@ def jobber_runner(problem_args):
 
     #Now we are ready to trigger the solver
     print("Solving the problem")
-    pi_threshold    =   problem_config["pi_threshold_scale"]\
+    pi_threshold        =   problem_config["pi_threshold_scale"]\
                             *(1.0/len(do_config))
+    positivity_epsilon  = problem_config["positivity_epsilon"]
+
+    if positivity_epsilon=="one_by_sample_size":
+        positivity_epsilon = 1.0/mixture_sample_size
+
     if infinite_sample_limit:
         pi_threshold=   1e-10   #Dont mess up with me here
+
     solver          =   GeneralMixtureSolver(
                             base_network=base_network,
                             do_config=do_config,
                             infinite_sample_limit=infinite_sample_limit,
                             mixture_samples=mixture_samples,
                             pi_threshold=pi_threshold,
-                            split_threshold=problem_config["split_threshold"]
+                            split_threshold=problem_config["split_threshold"],
+                            positivity_epsilon=positivity_epsilon,
     )
     #Getting the prediction
     pred_target_dict    =   solver.solve()
@@ -227,8 +236,8 @@ def jobber_runner(problem_args):
                                 do_config
     )
 
-    if infinite_sample_limit:
-        assert avg_score==1.0,"Problem in infinite sample limit"
+    # if infinite_sample_limit:
+    #     assert avg_score==1.0,"Problem in infinite sample limit"
 
     #Now we will save the config and the scores as a json file
     problem_config["js_score"]  =   avg_score
@@ -236,7 +245,7 @@ def jobber_runner(problem_args):
     #Writing the file to system
     fname   =   "{}/{}.json".format(experiment_id,job_id)
     with open(fname,"w") as fp:
-        json.dump(problem_config,fp)
+        json.dump(problem_config,fp,indent="\t")
 
     return problem_config
 
@@ -245,31 +254,32 @@ if __name__=="__main__":
     #Initializing the graph args
     graph_args={}
     graph_args["graph_type"]=["ER","SF"]
-    graph_args["num_nodes"]=[4,8,16]
-    graph_args["node_card"]=[2,4,8]
+    graph_args["num_nodes"]=[4,8,12]
+    graph_args["node_card"]=[3,5]
     graph_args["num_edges_dist"]=["uniform"] #dist to sample edge from
-    graph_args["num_edge_sample"]=[3] #number of random edge per config
-    graph_args["scale_alpha"]=[2,4,8]
+    graph_args["num_edge_sample"]=[1] #number of random edge per config
+    graph_args["scale_alpha"]=[2,16]
 
     #Initializing the sparsity args
     interv_args={}
-    interv_args["sparsity"]=[4,16,32]
-    interv_args["num_node_T"]=[10,1000,float("inf")]
+    interv_args["sparsity"]=[4,8,16]
+    interv_args["num_node_T"]=[10,10000,float("inf")]
     interv_args["pi_dist_type"]=["uniform","inverse"]
-    interv_args["pi_alpha_scale"]=[2,8,16]
+    interv_args["pi_alpha_scale"]=[2,16]
 
     #Initializing the sample distribution
     mixture_args={}
     mixture_args["mixture_sample_size"]=[1000,10000,100000,float("inf")]
     mixture_args["pi_threshold_scale"]=[0.25,0.5,1] #to be multipled by (1/|S|)
     mixture_args["split_threshold"]=[-1e-10]
+    mixture_args["positivity_epsilon"]=["one_by_sample_size"]
 
     #Evaluation args
     eval_args={}
     eval_args["matching_weight"]=[1.0/3.0]
 
     #Now we are ready to start our experiments
-    experiment_id="exp4"
+    experiment_id="exp8"
     pathlib.Path(experiment_id).mkdir(parents=True,exist_ok=True)
     shantilal = GeneralMixtureJobber(graph_args,interv_args,mixture_args,eval_args)
     shantilal.run_job_parallely(experiment_id)

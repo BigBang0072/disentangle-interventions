@@ -32,7 +32,8 @@ class DistributionHandler():
     do_graph_cache=None     #Creating none so that they dont share across
                             #instance of the object.
 
-    def __init__(self,base_network,do_config,mixture_samples,infinite_sample_limit):
+    def __init__(self,base_network,do_config,mixture_samples,
+                        infinite_sample_limit,positivity_epsilon):
         #Relearning the base network parameters in case of finite sample limit
         if infinite_sample_limit:
             self.base_network=base_network
@@ -40,6 +41,7 @@ class DistributionHandler():
             self.base_network=self._relearn_network_cpds_from_sample(
                                         mixture_samples.shape[0],
                                         base_network,
+                                        positivity_epsilon
             )
         #Initializing the do config
         self.do_config=do_config
@@ -53,7 +55,7 @@ class DistributionHandler():
         #Initializing the cache
         self.do_graph_cache={}
 
-    def _relearn_network_cpds_from_sample(self,num_samples,base_network):
+    def _relearn_network_cpds_from_sample(self,num_samples,base_network,positivity_epsilon):
         '''
         This function will generate sample from the base distribution and
         then relearn the base graph's CPD in order to simulate the working
@@ -79,6 +81,16 @@ class DistributionHandler():
 
         #Now we will relearn the base graph's CPDS from these samples
         base_network.base_graph.fit(base_samples,state_names=state_names)
+        #Now we have to ensure that we follow the positivity assumptions
+        for tab_cpd in base_network.base_graph.get_cpds():
+            #Correcting the cpd by adding positivity_epsilon and Renormalizing
+            cpd_arr = tab_cpd.get_values() + positivity_epsilon
+            cpd_arr = cpd_arr/np.sum(cpd_arr,axis=0,keepdims=True)
+
+            #Reassigning the new normalized arr to the tabular cpd
+            tab_cpd.values = cpd_arr
+
+
         assert len(base_network.base_graph.get_cpds())==len(nodes_card),"CPD not added"
 
         #Now we have update the base network
