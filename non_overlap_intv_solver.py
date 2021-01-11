@@ -61,6 +61,7 @@ class DistributionHandler():
         then relearn the base graph's CPD in order to simulate the working
         with sample scenario.
         '''
+        print("Relearning the base-dist from samples")
         assert num_samples!=len(base_network.topo_i2n),"Give num of samples"
         #First of all generating the samples
         base_samples = base_network.generate_sample_from_mixture(
@@ -94,6 +95,7 @@ class DistributionHandler():
         assert len(base_network.base_graph.get_cpds())==len(nodes_card),"CPD not added"
 
         #Now we have update the base network
+        print("Relearned the base-dist from samples")
         return base_network
 
     def _get_true_mixture_graph(self,):

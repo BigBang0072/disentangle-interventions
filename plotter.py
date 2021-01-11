@@ -160,6 +160,6 @@ class Plotter():
 
 
 if __name__=="__main__":
-    experiment_id="gasinha-exp1"
+    experiment_id="exp9"
     plotter = Plotter(experiment_id)
     plotter.plot_evaluation_metrics(group_criteria="graph_type")

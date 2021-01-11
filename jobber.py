@@ -132,12 +132,46 @@ class GeneralMixtureJobber():
                         )
         )
         random.shuffle(problem_list)
+        random.shuffle(problem_list)
 
         #Running the jobs
-        num_cpu = mp.cpu_count()//2
-        with mp.Pool(num_cpu) as p:
-            job_results = p.map(jobber,problem_list)
-        return job_results
+        # num_cpu = mp.cpu_count()//2
+        # with mp.Pool(num_cpu) as p:
+        #     job_results = p.map(jobber,problem_list)
+        # return job_results
+
+        #Defining the worker kernel
+        def worker_kernel(problem_list_shard):
+            #Iterating over all the problems in the list one by one
+            for problem_args in problem_list_shard:
+                #Running the jobber for that problem
+                jobber(problem_args)
+
+            return True
+
+        #Sharding the problem_list and running them parallely
+        num_cpu = (mp.cpu_count()//2)*3
+        num_per_worker = int(np.ceil(len(problem_list)*1.0/num_cpu))
+        process_list=[]
+        for widx in range(num_cpu):
+            #Sharding the problem list
+            print("Worker Initialized:{}\tstart:{}\tend:{}".format(widx,
+                                                    widx*num_per_worker,
+                                                    (widx+1)*num_per_worker,
+                                                )
+                )
+            problem_list_shard=problem_list[widx*num_per_worker:(widx+1)*num_per_worker]
+
+            #Starting the process with worker kernel
+            p = mp.Process(target=worker_kernel,
+                            args=(problem_list_shard,),
+                )
+            p.start()
+            process_list.append(p)
+
+        #Now joining all the process
+        [p.join() for p in process_list]
+
 
 def jobber(problem_args):
     #Saving all the results in one place
