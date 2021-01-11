@@ -6,6 +6,7 @@ import json
 import multiprocessing as mp
 import pathlib
 import pdb
+import random
 
 from graph_generator import GraphGenerator
 from data_handle import BnNetwork
@@ -130,6 +131,7 @@ class GeneralMixtureJobber():
                                 job_ids,
                         )
         )
+        random.shuffle(problem_list)
 
         #Running the jobs
         num_cpu = mp.cpu_count()//2
@@ -138,14 +140,22 @@ class GeneralMixtureJobber():
         return job_results
 
 def jobber(problem_args):
-    # return jobber_runner(problem_args)
+    #Saving all the results in one place
+    problem_config,experiment_id,job_id = problem_args
     try:
-        return jobber_runner(problem_args)
+        problem_config=jobber_runner(problem_args)
     except:
         print("Job terminated wrongly:")
         pprint(problem_args)
+        problem_config["js_score"]=np.nan
+        problem_config["avg_mse"]=np.nan
 
-    return None
+
+    #Writing the file to system
+    fname   =   "{}/{}.json".format(experiment_id,job_id)
+    with open(fname,"w") as fp:
+        json.dump(problem_config,fp,indent="\t")
+
 
 def jobber_runner(problem_args):
     '''
@@ -242,10 +252,6 @@ def jobber_runner(problem_args):
     #Now we will save the config and the scores as a json file
     problem_config["js_score"]  =   avg_score
     problem_config["avg_mse"]   =   avg_mse
-    #Writing the file to system
-    fname   =   "{}/{}.json".format(experiment_id,job_id)
-    with open(fname,"w") as fp:
-        json.dump(problem_config,fp,indent="\t")
 
     return problem_config
 
@@ -263,7 +269,7 @@ if __name__=="__main__":
     #Initializing the sparsity args
     interv_args={}
     interv_args["sparsity"]=[4,8,16]
-    interv_args["num_node_T"]=[10,10000,float("inf")]
+    interv_args["num_node_T"]=[10,float("inf")]
     interv_args["pi_dist_type"]=["uniform","inverse"]
     interv_args["pi_alpha_scale"]=[2,16]
 
@@ -279,7 +285,7 @@ if __name__=="__main__":
     eval_args["matching_weight"]=[1.0/3.0]
 
     #Now we are ready to start our experiments
-    experiment_id="exp8"
+    experiment_id="exp9"
     pathlib.Path(experiment_id).mkdir(parents=True,exist_ok=True)
     shantilal = GeneralMixtureJobber(graph_args,interv_args,mixture_args,eval_args)
     shantilal.run_job_parallely(experiment_id)
