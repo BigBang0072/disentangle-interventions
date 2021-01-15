@@ -279,6 +279,9 @@ def jobber_runner(problem_args):
                                 pred_target_dict,
                                 do_config
     )
+    #Saving the actual and predicted target dict for later evaluations
+    problem_config["pred_target_dict"]=pred_target_dict
+    problem_config["actual_target_dict"]=evaluator.actual_target_dict
 
     # if infinite_sample_limit:
     #     assert avg_score==1.0,"Problem in infinite sample limit"
@@ -295,7 +298,7 @@ if __name__=="__main__":
     graph_args={}
     graph_args["graph_type"]=["ER","SF"]
     graph_args["num_nodes"]=[4,8,12]
-    graph_args["node_card"]=[3,5]
+    graph_args["node_card"]=[3]
     graph_args["num_edges_dist"]=["uniform"] #dist to sample edge from
     graph_args["num_edge_sample"]=[1] #number of random edge per config
     graph_args["scale_alpha"]=[2,16]
@@ -319,7 +322,7 @@ if __name__=="__main__":
     eval_args["matching_weight"]=[1.0/3.0]
 
     #Now we are ready to start our experiments
-    experiment_id="exp9"
+    experiment_id="exp10"
     pathlib.Path(experiment_id).mkdir(parents=True,exist_ok=True)
     shantilal = GeneralMixtureJobber(graph_args,interv_args,mixture_args,eval_args)
     shantilal.run_job_parallely(experiment_id)

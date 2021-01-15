@@ -20,6 +20,7 @@ class EvaluatePrediction():
         '''
         #First of all lets convert all the data into required format
         actual_target_dict = self._get_actual_target_dict(do_config)
+        self.actual_target_dict=actual_target_dict
         print("Actual Target Dict:")
         pprint(actual_target_dict)
         print("Predicted Target Dict:")
