@@ -110,7 +110,7 @@ class GeneralMixtureJobber():
         if num_dist=="uniform":
             #max_edges = (num_nodes*(num_nodes-1))//2
             min_edges = 1*num_nodes
-            max_edges = 5*num_nodes
+            max_edges = min( (num_nodes*(num_nodes-1))//2 , 5*num_nodes)
             edge_sample = np.random.randint(min_edges,high=max_edges,
                                                 size=num_sample)
         else:
@@ -150,7 +150,7 @@ class GeneralMixtureJobber():
             return True
 
         #Sharding the problem_list and running them parallely
-        num_cpu = (mp.cpu_count()//2)*3
+        num_cpu = (mp.cpu_count()//3)*2
         num_per_worker = int(np.ceil(len(problem_list)*1.0/num_cpu))
         process_list=[]
         for widx in range(num_cpu):
