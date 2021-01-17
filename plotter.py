@@ -5,6 +5,7 @@ import numpy as np
 import glob
 import pdb
 from pprint import pprint
+from evaluator import EvaluatePrediction
 
 class Plotter():
     '''
@@ -40,6 +41,8 @@ class Plotter():
         '''
         #Converting the results into df
         expt_df = pd.DataFrame(self.all_expt_json)
+        expt_df = self._calculate_other_js_scores(expt_df)
+
         print("Size of Expt_df:{}".format(expt_df.shape))
         print(expt_df.head())
         # pdb.set_trace()
@@ -57,11 +60,79 @@ class Plotter():
 
         # pdb.set_trace()
 
+    def _calculate_other_js_scores(self,expt_df):
+        '''
+        This function will calculate the js_node and js_all and corresponding
+        mse error in addition to the js_weighted.
+        '''
+        #Creating the evaluator
+        evaluator = EvaluatePrediction(matching_weight=0.0)
+
+        #Adding additional columns to df
+        expt_df  = expt_df.assign(
+                                  js_node=pd.Series(np.zeros(expt_df.shape[0])),
+                                  mse_node=pd.Series(np.zeros(expt_df.shape[0])),
+                                  js_all=pd.Series(np.zeros(expt_df.shape[0])),
+                                  mse_all=pd.Series(np.zeros(expt_df.shape[0])),
+        )
+        expt_df = expt_df.rename(columns={
+                                        "js_score":"js_weighted",
+                                        "avg_mse":"mse_weighted",
+                                }
+        )
+
+        #Going through the samples one by one
+        for job_no in range(expt_df.shape[0]):
+            config = expt_df.iloc[job_no]
+
+            #Filling the nan positions with worst possible score
+            if np.isnan(config["js_weighted"]):
+                expt_df.at[job_no,"js_weighted"]=0.0
+                expt_df.at[job_no,"mse_weighted"]=2.0/config["sparsity"]
+
+                expt_df.at[job_no,"js_node"]=0.0
+                expt_df.at[job_no,"mse_node"]=2.0/config["sparsity"]
+
+                expt_df.at[job_no,"js_all"]=0.0
+                expt_df.at[job_no,"mse_all"]=2.0/config["sparsity"]
+
+                continue
+
+            #Now we are ready to calculate the other js
+            actual_target_dict = config["actual_target_dict"]
+            pred_target_dict = config["pred_target_dict"]
+
+            #Now we are ready for evaluation for js_node
+            evaluator.matching_weight=1.0
+            js_node,mse_node = evaluator.get_evaluation_scores(
+                                            pred_target_dict,
+                                            actual_target_dict.values()
+            )
+            expt_df.at[job_no,"js_node"]=js_node
+            expt_df.at[job_no,"mse_node"]=mse_node
+
+            #Now we are ready to calcualte the js_all
+            evaluator.matching_weight=0.0
+            js_all,mse_all = evaluator.get_evaluation_scores(
+                                            pred_target_dict,
+                                            actual_target_dict.values()
+            )
+            expt_df.at[job_no,"js_all"]=js_all
+            expt_df.at[job_no,"mse_all"]=mse_all
+
+        return expt_df
+
     def _get_metric_vs_sample_by(self,group_criteria,expt_df):
         '''
         This function will plot the metrics with respect to sample along
         with a certain fine variable given by group_criteria
         '''
+        #Defining the custom percentile function
+        def quantile25(x):
+            return x.quantile(0.20)
+        def quantile75(x):
+            return x.quantile(0.80)
+
         #Getting the evaluation criteria
         js_dict = {}
         mse_dict = {}
@@ -75,19 +146,27 @@ class Plotter():
             )
             #Now we will get the eval metrics based on sample size
             js_variation={}
-            js_variation["mean"]=gdf.groupby("mixture_sample_size")["js_score"]\
+            js_variation["mean"]=gdf.groupby("mixture_sample_size")["js_all"]\
                             .agg("mean").to_dict()
-            js_variation["std"]=gdf.groupby("mixture_sample_size")["js_score"]\
+            js_variation["std"]=gdf.groupby("mixture_sample_size")["js_all"]\
                             .agg("std").to_dict()
+            js_variation["q25"]=gdf.groupby("mixture_sample_size")["js_all"]\
+                            .agg(quantile25).to_dict()
+            js_variation["q75"]=gdf.groupby("mixture_sample_size")["js_all"]\
+                            .agg(quantile75).to_dict()
             print("js_variation:")
             pprint(js_variation)
 
             #Getting the mse variation
             mse_variation={}
-            mse_variation["mean"]=gdf.groupby("mixture_sample_size")["avg_mse"]\
+            mse_variation["mean"]=gdf.groupby("mixture_sample_size")["mse_all"]\
                             .agg("mean").to_dict()
-            mse_variation["std"]=gdf.groupby("mixture_sample_size")["avg_mse"]\
+            mse_variation["std"]=gdf.groupby("mixture_sample_size")["mse_all"]\
                             .agg("std").to_dict()
+            mse_variation["q25"]=gdf.groupby("mixture_sample_size")["mse_all"]\
+                            .agg(quantile25).to_dict()
+            mse_variation["q75"]=gdf.groupby("mixture_sample_size")["mse_all"]\
+                            .agg(quantile75).to_dict()
             print("mse_varitaion")
             pprint(mse_variation)
 
@@ -127,8 +206,12 @@ class Plotter():
         for gname in metric_dict.keys():
             #Preparing the variation info for this group
             variation_dict=metric_dict[gname]
-            yval = [variation_dict["mean"][size] for size in sample_sizes]
+            yval = np.array([variation_dict["mean"][size] for size in sample_sizes])
             yerr = [variation_dict["std"][size]/2 for size in sample_sizes]
+            yq25 = [yval[sidx]-variation_dict["q25"][size]
+                                for sidx,size in enumerate(sample_sizes)]
+            yq75 = [variation_dict["q75"][size]-yval[sidx]
+                                for sidx,size in enumerate(sample_sizes)]
 
             #preparing the level-curve name
             curve_name = "{0:}={1:} : expt_ratio={2:0.2f}".format(
@@ -137,8 +220,12 @@ class Plotter():
                                                         gratio_dict[gname])
 
 
-            ax.errorbar(xval,yval,yerr=yerr,fmt='o-',alpha=0.6,
-                            uplims=True,lolims=True,label=curve_name)
+            ax.errorbar(xval,yval,yerr=(yq25,yq75),fmt='o-',alpha=0.6,
+                            capsize=5,capthick=2,linewidth=2,label=curve_name)
+
+            #Plotting by filling in between the error
+            ax.fill_between(xval,yval-yq25,yval+yq75,alpha=0.1)
+
 
         #Now we are done with the plotting, lets beautiy it
         xlabels = [str(size) for size in sample_sizes]
@@ -153,6 +240,7 @@ class Plotter():
             ax.set_ylabel("Average Weighted-Jaccard-Similarity")
         else:
             ax.legend(loc="upper right")
+            #ax.set_ylim(0,2.0/4.0)
             ax.set_ylabel("Average MSE in Mixing Coefficient")
 
         #Setting the grid
@@ -160,6 +248,6 @@ class Plotter():
 
 
 if __name__=="__main__":
-    experiment_id="exp9"
+    experiment_id="gasinha-exp6"
     plotter = Plotter(experiment_id)
-    plotter.plot_evaluation_metrics(group_criteria="graph_type")
+    plotter.plot_evaluation_metrics(group_criteria="split_threshold")
