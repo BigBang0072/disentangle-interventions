@@ -8,3 +8,4 @@ temp
 temp.py
 *.json
 *.gz
+*.tsv

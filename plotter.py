@@ -39,17 +39,27 @@ class Plotter():
         Now we have dict of all the experiment, with its config and the
         evaluation metrics
         '''
-        #Converting the results into df
-        expt_df = pd.DataFrame(self.all_expt_json)
-        expt_df = self._calculate_other_js_scores(expt_df)
+        tsv_path = "{}/expt_df.tsv".format(self.experiment_id)
+        try:
+            print("Loading the cached dataframe")
+            #Directly loading the df from excel
+            expt_df=pd.read_csv(tsv_path,sep="\t")
+        except:
+            #Converting the results into df
+            expt_df = pd.DataFrame(self.all_expt_json)
+            # pdb.set_trace()
+            expt_df = self._calculate_other_js_scores(expt_df)
+            #Saving the dataframe for faster loading later
+            expt_df.to_csv(tsv_path,sep="\t")
 
         print("Size of Expt_df:{}".format(expt_df.shape))
         print(expt_df.head())
         # pdb.set_trace()
 
         #Getting the unique sample sizes
-        sample_sizes=expt_df.mixture_sample_size.unique()
+        sample_sizes=expt_df.mixture_sample_size.unique().tolist()
         sample_sizes.sort()
+        # sample_sizes.remove(float("inf"))
 
         #Getting the evaluation metric by the group criteria
         js_dict,mse_dict,gratio_dict=\
@@ -230,7 +240,7 @@ class Plotter():
         #Now we are done with the plotting, lets beautiy it
         xlabels = [str(size) for size in sample_sizes]
         ax.set_xticks(xval)
-        ax.set_xticklabels(xlabels)
+        ax.set_xticklabels(xlabels,rotation=45)
         ax.set_xlabel("Sample Size")
 
         #Setting the title for the y-axis
@@ -248,6 +258,6 @@ class Plotter():
 
 
 if __name__=="__main__":
-    experiment_id="gasinha-exp6"
+    experiment_id="exp22"
     plotter = Plotter(experiment_id)
-    plotter.plot_evaluation_metrics(group_criteria="split_threshold")
+    plotter.plot_evaluation_metrics(group_criteria="pi_threshold_scale")

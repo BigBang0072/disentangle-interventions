@@ -50,8 +50,11 @@ class GeneralMixtureJobber():
         #Initialing the evaluation ards
         self._generate_flatten_args(graph_args)
         self._generate_flatten_args(interv_args)
-        self._generate_flatten_args(mixture_args)
         self._generate_flatten_args(eval_args)
+
+        #Now we wont outer product the sample size instead on same graph
+        #We will run the expt for different sample size
+        self.mixture_sample_sizes=tuple(mixture_args["mixture_sample_size"])
 
         #Now we will flatten all these arguments into list of problem instance
         self._get_all_problem_config()
@@ -94,12 +97,18 @@ class GeneralMixtureJobber():
 
             #Now we will update the num_edge_sample with num_edge
             for num_edge in edge_sample:
+                #Adding the edge number
                 new_config = config_dict.copy()
                 new_config["num_edges"]=num_edge
+
+                #Also adding all the sample sizes over which we have to run
+                new_config["all_sample_sizes"]=self.mixture_sample_sizes
+
                 #Adding this config to all problem list
                 all_problem_config.append(new_config)
 
         #Saving all the problem list
+        # pdb.set_trace()
         self.all_problem_config=all_problem_config
 
     def _get_num_edges(self,num_nodes,num_sample,num_dist):
@@ -150,7 +159,7 @@ class GeneralMixtureJobber():
             return True
 
         #Sharding the problem_list and running them parallely
-        num_cpu = (mp.cpu_count()//3)*2
+        num_cpu = (mp.cpu_count()//4)*3
         num_per_worker = int(np.ceil(len(problem_list)*1.0/num_cpu))
         process_list=[]
         for widx in range(num_cpu):
@@ -176,27 +185,6 @@ class GeneralMixtureJobber():
 def jobber(problem_args):
     #Saving all the results in one place
     problem_config,experiment_id,job_id = problem_args
-    try:
-        problem_config=jobber_runner(problem_args)
-    except:
-        print("Job terminated wrongly:")
-        pprint(problem_args)
-        problem_config["js_score"]=np.nan
-        problem_config["avg_mse"]=np.nan
-
-
-    #Writing the file to system
-    fname   =   "{}/{}.json".format(experiment_id,job_id)
-    with open(fname,"w") as fp:
-        json.dump(problem_config,fp,indent="\t")
-
-
-def jobber_runner(problem_args):
-    '''
-    This function will be called by each of the process to run the problem
-    and get the result and save it in the JSON format.
-    '''
-    problem_config,experiment_id,job_id = problem_args
     print("==========================================================")
     print("==========================================================")
     print("==========================================================")
@@ -215,6 +203,7 @@ def jobber_runner(problem_args):
     )
     #Now generating the bayesian network
     base_network    =   BnNetwork(modelPath)
+    base_graph      =   base_network.base_graph.copy()
 
 
 
@@ -230,7 +219,36 @@ def jobber_runner(problem_args):
     )
     do_config           =   target_generator.generate_all_targets()
 
+    #Now one by one we will try to run the problem for all the sample size
+    for mixture_sample_size in problem_config["all_sample_sizes"]:
+        #Adding that mixture size to the problem config
+        problem_config["mixture_sample_size"]=mixture_sample_size
+        #Resetting the base graph with actual distribution
+        base_network.base_graph=base_graph.copy()
 
+        #Now running the problem
+        try:
+            problem_config=jobber_runner(problem_config,
+                                            base_network,
+                                            do_config.copy())
+        except:
+            print("Job terminated wrongly:")
+            pprint(problem_args)
+            problem_config["js_score"]=np.nan
+            problem_config["avg_mse"]=np.nan
+
+
+        #Writing the file to system
+        fname   =   "{}/j{}_s{}.json".format(experiment_id,job_id,mixture_sample_size)
+        with open(fname,"w") as fp:
+            json.dump(problem_config,fp,indent="\t")
+
+
+def jobber_runner(problem_config,base_network,do_config):
+    '''
+    This function will be called by each of the process to run the problem
+    and get the result and save it in the JSON format.
+    '''
 
     #Now we will generate the mixture data
     infinite_sample_limit   =   False
@@ -249,8 +267,12 @@ def jobber_runner(problem_args):
 
     #Now we are ready to trigger the solver
     print("Solving the problem")
-    pi_threshold        =   problem_config["pi_threshold_scale"]\
-                            *(1.0/len(do_config))
+    #Prior knowledge in threshold
+    # pi_threshold        =   problem_config["pi_threshold_scale"]\
+    #                         *(1.0/len(do_config))
+
+    #From now on we will be interested in absolute threshold
+    pi_threshold        =   problem_config["pi_threshold_scale"]
     positivity_epsilon  = problem_config["positivity_epsilon"]
 
     if positivity_epsilon=="one_by_sample_size":
@@ -305,24 +327,24 @@ if __name__=="__main__":
 
     #Initializing the sparsity args
     interv_args={}
-    interv_args["sparsity"]=[4,8,16]
+    interv_args["sparsity"]= np.random.randint(4,high=16,size=5).tolist()
     interv_args["num_node_T"]=[10,float("inf")]
-    interv_args["pi_dist_type"]=["uniform","inverse"]
+    interv_args["pi_dist_type"]=["uniform"]
     interv_args["pi_alpha_scale"]=[2,16]
 
     #Initializing the sample distribution
     mixture_args={}
-    mixture_args["mixture_sample_size"]=[1000,10000,100000,float("inf")]
-    mixture_args["pi_threshold_scale"]=[0.25,0.5,1] #to be multipled by (1/|S|)
-    mixture_args["split_threshold"]=[-1e-10]
-    mixture_args["positivity_epsilon"]=["one_by_sample_size"]
+    mixture_args["mixture_sample_size"]= (2**np.arange(4,21)).tolist()
 
     #Evaluation args
     eval_args={}
     eval_args["matching_weight"]=[1.0/3.0]
+    eval_args["pi_threshold_scale"]=[1e-3]
+    eval_args["split_threshold"]=[-1e-10]
+    eval_args["positivity_epsilon"]=["one_by_sample_size"]
 
     #Now we are ready to start our experiments
-    experiment_id="exp10"
+    experiment_id="exp22"
     pathlib.Path(experiment_id).mkdir(parents=True,exist_ok=True)
     shantilal = GeneralMixtureJobber(graph_args,interv_args,mixture_args,eval_args)
     shantilal.run_job_parallely(experiment_id)
