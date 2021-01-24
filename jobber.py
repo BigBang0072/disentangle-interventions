@@ -220,9 +220,10 @@ def jobber(problem_args):
     do_config           =   target_generator.generate_all_targets()
 
     #Now one by one we will try to run the problem for all the sample size
-    for mixture_sample_size in problem_config["all_sample_sizes"]:
+    for mixture_sample_size,pi_threshold_scale in problem_config["all_sample_sizes"]:
         #Adding that mixture size to the problem config
         problem_config["mixture_sample_size"]=mixture_sample_size
+        problem_config["pi_threshold_scale"]=pi_threshold_scale
         #Resetting the base graph with actual distribution
         base_network.base_graph=base_graph.copy()
 
@@ -239,7 +240,11 @@ def jobber(problem_args):
 
 
         #Writing the file to system
-        fname   =   "{}/j{}_s{}.json".format(experiment_id,job_id,mixture_sample_size)
+        fname   =   "{}/j{}_s{}_t{}.json".format(
+                                        experiment_id,
+                                        job_id,
+                                        mixture_sample_size,
+                                        pi_threshold_scale)
         with open(fname,"w") as fp:
             json.dump(problem_config,fp,indent="\t")
 
@@ -323,28 +328,32 @@ if __name__=="__main__":
     graph_args["node_card"]=[3]
     graph_args["num_edges_dist"]=["uniform"] #dist to sample edge from
     graph_args["num_edge_sample"]=[1] #number of random edge per config
-    graph_args["scale_alpha"]=[2,16]
+    graph_args["scale_alpha"]=[2]
 
     #Initializing the sparsity args
     interv_args={}
-    interv_args["sparsity"]= np.random.randint(4,high=16,size=5).tolist()
-    interv_args["num_node_T"]=[10,float("inf")]
+    interv_args["sparsity"]= np.random.randint(4,high=16,size=100).tolist()
+    interv_args["num_node_T"]=[float("inf")]
     interv_args["pi_dist_type"]=["uniform"]
-    interv_args["pi_alpha_scale"]=[2,16]
+    interv_args["pi_alpha_scale"]=[2]
 
     #Initializing the sample distribution
     mixture_args={}
-    mixture_args["mixture_sample_size"]= (2**np.arange(4,21)).tolist()
+    mixture_args["mixture_sample_size"]= list(itertools.product(*
+                                        [
+                                            (2**np.arange(4,21)).tolist()+[float("inf")],
+                                            [1e-5,1e-3]
+                                        ]
+                                ))
 
     #Evaluation args
     eval_args={}
     eval_args["matching_weight"]=[1.0/3.0]
-    eval_args["pi_threshold_scale"]=[1e-3]
     eval_args["split_threshold"]=[-1e-10]
     eval_args["positivity_epsilon"]=["one_by_sample_size"]
 
     #Now we are ready to start our experiments
-    experiment_id="exp22"
+    experiment_id="exp31"
     pathlib.Path(experiment_id).mkdir(parents=True,exist_ok=True)
     shantilal = GeneralMixtureJobber(graph_args,interv_args,mixture_args,eval_args)
-    shantilal.run_job_parallely(experiment_id)
+    # shantilal.run_job_parallely(experiment_id)

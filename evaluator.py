@@ -47,6 +47,15 @@ class EvaluatePrediction():
                     or act_name in matched_actual_dict):
                 continue
 
+            #Skipping of the matching score is == 0.0 (actually we could break as
+            #all the score will be zero from here)
+            if (score==0.0):
+                continue
+
+            #Now based on sir's comment to consider only match made in heaven
+            if (score<1.0):
+                continue
+
             #Now whatever we have it's a match
             print("Match: actual:{}\t pred:{}\t score:{}".format(act_name,
                                                             pred_name,
@@ -68,19 +77,20 @@ class EvaluatePrediction():
                                             matched_actual_dict,
                                             matched_score_list,
                                             matched_pi_diff)
-        elif len(matched_pred_dict)!=len(pred_target_dict):
+        if len(matched_pred_dict)!=len(pred_target_dict):
             self._add_unmatched_target_score(pred_target_dict,
                                             matched_pred_dict,
                                             matched_score_list,
                                             matched_pi_diff)
 
         #Now calculating the average score and mse
-        avg_score = np.mean(matched_score_list)
+        recall = np.sum(matched_score_list)/len(actual_target_dict)
+        precision = np.sum(matched_score_list)/len(pred_target_dict)
         avg_mse = np.mean(np.array(matched_pi_diff)**2)
 
-        print("Score: avg_js:{}\t avg_mse:{}".format(avg_score,avg_mse))
+        print("Score: recall:{}\t precision:{}\t avg_mse:{}".format(recall,precision,avg_mse))
 
-        return avg_score,avg_mse
+        return recall,precision,avg_mse
 
     def _add_unmatched_target_score(self,target_dict,matched_names,matched_score_list,matched_pi_diff):
         #Iterating over the target dict

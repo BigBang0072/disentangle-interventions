@@ -44,6 +44,7 @@ class Plotter():
             print("Loading the cached dataframe")
             #Directly loading the df from excel
             expt_df=pd.read_csv(tsv_path,sep="\t")
+            # pdb.set_trace()
         except:
             #Converting the results into df
             expt_df = pd.DataFrame(self.all_expt_json)
@@ -97,14 +98,14 @@ class Plotter():
 
             #Filling the nan positions with worst possible score
             if np.isnan(config["js_weighted"]):
-                expt_df.at[job_no,"js_weighted"]=0.0
-                expt_df.at[job_no,"mse_weighted"]=2.0/config["sparsity"]
-
-                expt_df.at[job_no,"js_node"]=0.0
-                expt_df.at[job_no,"mse_node"]=2.0/config["sparsity"]
-
-                expt_df.at[job_no,"js_all"]=0.0
-                expt_df.at[job_no,"mse_all"]=2.0/config["sparsity"]
+                # expt_df.at[job_no,"js_weighted"]=0.0
+                # expt_df.at[job_no,"mse_weighted"]=2.0/config["sparsity"]
+                #
+                # expt_df.at[job_no,"js_node"]=0.0
+                # expt_df.at[job_no,"mse_node"]=2.0/config["sparsity"]
+                #
+                # expt_df.at[job_no,"js_all"]=0.0
+                # expt_df.at[job_no,"mse_all"]=2.0/config["sparsity"]
 
                 continue
 
@@ -112,22 +113,24 @@ class Plotter():
             actual_target_dict = config["actual_target_dict"]
             pred_target_dict = config["pred_target_dict"]
 
-            #Now we are ready for evaluation for js_node
-            evaluator.matching_weight=1.0
-            js_node,mse_node = evaluator.get_evaluation_scores(
-                                            pred_target_dict,
-                                            actual_target_dict.values()
-            )
-            expt_df.at[job_no,"js_node"]=js_node
-            expt_df.at[job_no,"mse_node"]=mse_node
+            # #Now we are ready for evaluation for js_node
+            # evaluator.matching_weight=1.0
+            # js_node,mse_node = evaluator.get_evaluation_scores(
+            #                                 pred_target_dict,
+            #                                 actual_target_dict.values()
+            # )
+            # expt_df.at[job_no,"js_node"]=js_node
+            # expt_df.at[job_no,"mse_node"]=mse_node
 
             #Now we are ready to calcualte the js_all
             evaluator.matching_weight=0.0
-            js_all,mse_all = evaluator.get_evaluation_scores(
+            recall,precision,mse_all = evaluator.get_evaluation_scores(
                                             pred_target_dict,
                                             actual_target_dict.values()
             )
-            expt_df.at[job_no,"js_all"]=js_all
+            expt_df.at[job_no,"recall"]=recall
+            expt_df.at[job_no,"precision"]=precision
+            expt_df.at[job_no,"fscore"]=2*(precision*recall)/(precision+recall)
             expt_df.at[job_no,"mse_all"]=mse_all
 
         return expt_df
@@ -156,13 +159,13 @@ class Plotter():
             )
             #Now we will get the eval metrics based on sample size
             js_variation={}
-            js_variation["mean"]=gdf.groupby("mixture_sample_size")["js_all"]\
+            js_variation["mean"]=gdf.groupby("mixture_sample_size")["recall"]\
                             .agg("mean").to_dict()
-            js_variation["std"]=gdf.groupby("mixture_sample_size")["js_all"]\
+            js_variation["std"]=gdf.groupby("mixture_sample_size")["recall"]\
                             .agg("std").to_dict()
-            js_variation["q25"]=gdf.groupby("mixture_sample_size")["js_all"]\
+            js_variation["q25"]=gdf.groupby("mixture_sample_size")["recall"]\
                             .agg(quantile25).to_dict()
-            js_variation["q75"]=gdf.groupby("mixture_sample_size")["js_all"]\
+            js_variation["q75"]=gdf.groupby("mixture_sample_size")["recall"]\
                             .agg(quantile75).to_dict()
             print("js_variation:")
             pprint(js_variation)
@@ -246,7 +249,7 @@ class Plotter():
         #Setting the title for the y-axis
         if is_js:
             ax.legend(loc="upper left")
-            ax.set_ylim(0,1.2)
+            ax.set_ylim(0,1.05)
             ax.set_ylabel("Average Weighted-Jaccard-Similarity")
         else:
             ax.legend(loc="upper right")
@@ -258,6 +261,6 @@ class Plotter():
 
 
 if __name__=="__main__":
-    experiment_id="exp22"
+    experiment_id="gasinha-exp11"
     plotter = Plotter(experiment_id)
-    plotter.plot_evaluation_metrics(group_criteria="pi_threshold_scale")
+    plotter.plot_evaluation_metrics(group_criteria="graph_type")
