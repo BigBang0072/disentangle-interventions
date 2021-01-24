@@ -232,8 +232,9 @@ def jobber(problem_args):
             problem_config=jobber_runner(problem_config,
                                             base_network,
                                             do_config.copy())
-        except:
+        except Exception as e:
             print("Job terminated wrongly:")
+            print(e)
             pprint(problem_args)
             problem_config["js_score"]=np.nan
             problem_config["avg_mse"]=np.nan

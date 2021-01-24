@@ -62,7 +62,7 @@ class DistributionHandler():
         with sample scenario.
         '''
         print("Relearning the base-dist from samples")
-        assert num_samples!=len(base_network.topo_i2n),"Give num of samples"
+        # assert num_samples!=len(base_network.topo_i2n),"Give num of samples"
         #First of all generating the samples
         base_samples = base_network.generate_sample_from_mixture(
                                         do_config=[
