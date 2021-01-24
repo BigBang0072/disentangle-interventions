@@ -21,7 +21,8 @@ class GeneralMixtureSolver():
 
     def __init__(self,base_network,do_config,
                 infinite_sample_limit,mixture_samples,
-                pi_threshold,split_threshold,positivity_epsilon):
+                pi_threshold,split_threshold,
+                positivity_epsilon,positive_sol_threshold):
         self.base_network=base_network
         self.infinite_sample_limit=infinite_sample_limit
 
@@ -29,6 +30,8 @@ class GeneralMixtureSolver():
         self.pi_threshold=pi_threshold
         #Threshold allows the old target to split "slightly" more than possible
         self.split_threshold=split_threshold
+        #Threshold to allow positive sol when solving Ax=b
+        self.positive_sol_threshold=positive_sol_threshold
 
         #Initializing the global target count (for numbering targets)
         self.global_target_counter=0
@@ -332,8 +335,10 @@ class GeneralMixtureSolver():
         #Trying one by one each of the category to be zero
         feasible_solutions={}
         feasible_score=[]
-        minimum_residual=float("inf")
-        selected_cidx=-1
+        minimum_residual_positive=float("inf")
+        minimum_residual_project=float("inf")
+        selected_cidx_positive=-1
+        selected_cidx_project=-1
         print("Solving system analytically:")
         for cidx in range(A.shape[0]):
             #Getting the solution if this cidx is zero
@@ -342,20 +347,47 @@ class GeneralMixtureSolver():
             split_pis[cidx]=0.0
             #TODO: Possibly we could do thresholding here
 
-            #Adding this solution to list of feasible solution
-            feasible_solutions[cidx]=split_pis
-
             #Now checking the validity of this solution (Stage 1: only one should go)
-            if np.sum(split_pis>=0)==A.shape[0]:
+            if np.sum(split_pis>self.positive_sol_threshold)==A.shape[0]:
+                split_pis = split_pis*(split_pis>0)
+
                 #Getting the residual of the solution
                 residual = np.sum((np.matmul(A,split_pis)-b)**2)
                 feasible_score.append((cidx,residual))
                 print("cidx:{}\t residual:{}\t fpi:".format(
                                                     cidx,residual,split_pis))
 
-                if residual<minimum_residual:
-                    minimum_residual=residual
-                    selected_cidx=cidx
+                if residual<minimum_residual_positive:
+                    #Adding this solution to list of feasible solution
+                    feasible_solutions[cidx]=split_pis
+                    #Updating the solution tracker
+                    minimum_residual_positive=residual
+                    selected_cidx_positive=cidx
+            elif selected_cidx_positive==-1:
+                #If no positive solution is yet found
+                split_pis = split_pis*(split_pis>0)
+
+                #Getting the residual of the solution
+                residual = np.sum((np.matmul(A,split_pis)-b)**2)
+                feasible_score.append((cidx,residual))
+                print("cidx:{}\t residual:{}\t fpi:".format(
+                                                    cidx,residual,split_pis))
+
+                if residual<minimum_residual_project:
+                    #Adding this solution to list of feasible solution
+                    feasible_solutions[cidx]=split_pis
+                    #Updating the solution tracker
+                    minimum_residual_project=residual
+                    selected_cidx_project=cidx
+
+        #Now we are ready to select one of cidx
+        selected_cidx=selected_cidx_positive
+        minimum_residual= minimum_residual_positive
+        if selected_cidx_positive==-1:
+            selected_cidx=selected_cidx_project
+            minimum_residual=minimum_residual_project
+
+
         print("selected cidx:{}\t residual:{}\t pis:{}\t".format(
                                         selected_cidx,
                                         minimum_residual,

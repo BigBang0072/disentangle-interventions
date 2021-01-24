@@ -277,8 +277,9 @@ def jobber_runner(problem_config,base_network,do_config):
     #                         *(1.0/len(do_config))
 
     #From now on we will be interested in absolute threshold
-    pi_threshold        =   problem_config["pi_threshold_scale"]
-    positivity_epsilon  = problem_config["positivity_epsilon"]
+    pi_threshold            =   problem_config["pi_threshold_scale"]
+    positivity_epsilon      =   problem_config["positivity_epsilon"]
+    positive_sol_threshold  =   problem_config["positive_sol_threshold"]
 
     if positivity_epsilon=="one_by_sample_size":
         positivity_epsilon = 1.0/mixture_sample_size
@@ -294,6 +295,7 @@ def jobber_runner(problem_config,base_network,do_config):
                             pi_threshold=pi_threshold,
                             split_threshold=problem_config["split_threshold"],
                             positivity_epsilon=positivity_epsilon,
+                            positive_sol_threshold=positive_sol_threshold
     )
     #Getting the prediction
     pred_target_dict    =   solver.solve()
@@ -302,7 +304,7 @@ def jobber_runner(problem_config,base_network,do_config):
     evaluator           =   EvaluatePrediction(
                                 matching_weight=problem_config["matching_weight"]
     )
-    avg_score,avg_mse   =   evaluator.get_evaluation_scores(
+    recall,_,avg_mse   =   evaluator.get_evaluation_scores(
                                 pred_target_dict,
                                 do_config
     )
@@ -314,7 +316,7 @@ def jobber_runner(problem_config,base_network,do_config):
     #     assert avg_score==1.0,"Problem in infinite sample limit"
 
     #Now we will save the config and the scores as a json file
-    problem_config["js_score"]  =   avg_score
+    problem_config["js_score"]  =   recall
     problem_config["avg_mse"]   =   avg_mse
 
     return problem_config
@@ -342,7 +344,7 @@ if __name__=="__main__":
     mixture_args["mixture_sample_size"]= list(itertools.product(*
                                         [
                                             (2**np.arange(4,21)).tolist()+[float("inf")],
-                                            [1e-5,1e-3]
+                                            [1e-3]
                                         ]
                                 ))
 
@@ -351,9 +353,10 @@ if __name__=="__main__":
     eval_args["matching_weight"]=[1.0/3.0]
     eval_args["split_threshold"]=[-1e-10]
     eval_args["positivity_epsilon"]=["one_by_sample_size"]
+    eval_args["positive_sol_threshold"]=[-1e-10]
 
     #Now we are ready to start our experiments
-    experiment_id="exp31"
+    experiment_id="exp33"
     pathlib.Path(experiment_id).mkdir(parents=True,exist_ok=True)
     shantilal = GeneralMixtureJobber(graph_args,interv_args,mixture_args,eval_args)
-    # shantilal.run_job_parallely(experiment_id)
+    shantilal.run_job_parallely(experiment_id)

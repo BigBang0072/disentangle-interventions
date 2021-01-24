@@ -50,11 +50,11 @@ class EvaluatePrediction():
             #Skipping of the matching score is == 0.0 (actually we could break as
             #all the score will be zero from here)
             if (score==0.0):
-                continue
+                break
 
             #Now based on sir's comment to consider only match made in heaven
             if (score<1.0):
-                continue
+                break
 
             #Now whatever we have it's a match
             print("Match: actual:{}\t pred:{}\t score:{}".format(act_name,
