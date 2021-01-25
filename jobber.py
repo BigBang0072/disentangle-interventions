@@ -7,6 +7,7 @@ import multiprocessing as mp
 import pathlib
 import pdb
 import random
+import sys
 
 from graph_generator import GraphGenerator
 from data_handle import BnNetwork
@@ -149,12 +150,31 @@ class GeneralMixtureJobber():
         #     job_results = p.map(jobber,problem_list)
         # return job_results
 
+        #Saving the actual stdout
+        sysout = sys.stdout
+        syserr = sys.stderr
+
         #Defining the worker kernel
-        def worker_kernel(problem_list_shard):
+        def worker_kernel(problem_list_shard,widx):
             #Iterating over all the problems in the list one by one
             for problem_args in problem_list_shard:
-                #Running the jobber for that problem
-                jobber(problem_args)
+                #Now opening a new context for each of the problem
+                _,expt_id,job_id=problem_args
+                log_fname = "{}/logs_job-{}.txt".format(expt_id,job_id)
+                with open(log_fname,"w") as log_port:
+                    sys.stdout = sysout
+                    sys.stderr = syserr
+                    print("Saving logs for worker:{}\t job:{}\t to:{}".format(
+                                                        widx,
+                                                        job_id,
+                                                        log_fname)
+                    )
+                    #Conneting the print pipe to log port
+                    sys.stdout = log_port
+                    sys.stderr = log_port
+                    print("Starting in a new logfile for job:{}".format(job_id))
+                    #Running the jobber for that problem
+                    jobber(problem_args)
 
             return True
 
@@ -173,7 +193,7 @@ class GeneralMixtureJobber():
 
             #Starting the process with worker kernel
             p = mp.Process(target=worker_kernel,
-                            args=(problem_list_shard,),
+                            args=(problem_list_shard,widx),
                 )
             p.start()
             process_list.append(p)
