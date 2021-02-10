@@ -86,7 +86,7 @@ class EvaluatePrediction():
         #Now calculating the average score and mse
         recall = np.sum(matched_score_list)/len(actual_target_dict)
         precision = np.sum(matched_score_list)/len(pred_target_dict)
-        avg_mse = np.mean(np.array(matched_pi_diff)**2)
+        avg_mse = (np.mean(np.array(matched_pi_diff)**2))**(0.5)
 
         print("Score: recall:{}\t precision:{}\t avg_mse:{}".format(recall,precision,avg_mse))
 
