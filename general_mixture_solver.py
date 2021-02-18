@@ -20,7 +20,7 @@ class GeneralMixtureSolver():
     infinite_sample_limit=None  #boolean to denote to simulate infinite sample
 
     def __init__(self,base_network,do_config,
-                infinite_sample_limit,mixture_samples,
+                infinite_sample_limit,base_samples,mixture_samples,
                 pi_threshold,split_threshold,
                 positivity_epsilon,positive_sol_threshold):
         self.base_network=base_network
@@ -39,9 +39,11 @@ class GeneralMixtureSolver():
         #Initializing the distirubiton handler
         self.dist_handler=DistributionHandler(base_network,
                                             do_config,
+                                            base_samples,
                                             mixture_samples,
                                             infinite_sample_limit,
-                                            positivity_epsilon)
+                                            positivity_epsilon,
+                                            )
 
     def solve(self,):
         '''
