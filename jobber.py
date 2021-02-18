@@ -312,6 +312,7 @@ def jobber_runner(problem_config,base_network,do_config):
                             base_network=base_network,
                             do_config=do_config,
                             infinite_sample_limit=infinite_sample_limit,
+                            base_samples= None,
                             mixture_samples=mixture_samples,
                             pi_threshold=pi_threshold,
                             split_threshold=problem_config["split_threshold"],
@@ -377,7 +378,7 @@ if __name__=="__main__":
     eval_args["positive_sol_threshold"]=[-1e-10]
 
     #Now we are ready to start our experiments
-    experiment_id="exp33"
+    experiment_id="exp41"
     pathlib.Path(experiment_id).mkdir(parents=True,exist_ok=True)
     shantilal = GeneralMixtureJobber(graph_args,interv_args,mixture_args,eval_args)
     shantilal.run_job_parallely(experiment_id)

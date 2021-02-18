@@ -167,7 +167,7 @@ class CompareJobber():
         positive_sol_threshold  =   self.eval_args["positive_sol_threshold"]
 
         if positivity_epsilon=="one_by_sample_size":
-            positivity_epsilon = 1.0/mixture_sample_size
+            positivity_epsilon = 1.0/base_samples.shape[0]
 
         if infinite_sample_limit:
             pi_threshold=   1e-10   #Dont mess up with me here
@@ -205,11 +205,15 @@ class CompareJobber():
                                 )
 
         #Now its time to separate out the whole data frame as numpy
-        all_binned_sample=all_samples.to_numpy()
+        all_binned_sample=all_samples
+        all_binned_sample.columns=[str(idx)
+                                    for idx in range(all_samples.shape[1])
+                        ]
 
+        # pdb.set_trace()
         #Now we will remove out the base sample and keep the rest of sample
-        binned_base_samples = all_binned_sample[0:base_samples.shape[0]].copy()
-        binned_mixture_samples = all_binned_sample[base_samples.shape[0]:].copy()
+        binned_base_samples = all_binned_sample.iloc[0:base_samples.shape[0]].copy()
+        binned_mixture_samples = all_binned_sample.iloc[base_samples.shape[0]:].copy()
 
         assert (
             (binned_base_samples.shape[0]+binned_mixture_samples.shape[0])\
@@ -222,8 +226,8 @@ class CompareJobber():
 if __name__=="__main__":
     #Defininte the graph args
     graph_args={}
-    graph_args["num_nodes"]=10
-    graph_args["node_card"]=8
+    graph_args["num_nodes"]=4
+    graph_args["node_card"]=3
     graph_args["expt_nbrs"]=2
     graph_args["scale_alpha"]=2
 
@@ -241,10 +245,10 @@ if __name__=="__main__":
     eval_args["u_alpha_inv"]=1e-3
     #Ours configs
     eval_args["pi_threshold"]=1e-3
-    eval_args["matching_weight"]=[1.0/3.0]
-    eval_args["split_threshold"]=[-1e-10]
-    eval_args["positivity_epsilon"]=["one_by_sample_size"]
-    eval_args["positive_sol_threshold"]=[-1e-10]
+    eval_args["matching_weight"]=1.0/3.0
+    eval_args["split_threshold"]=(-1e-10)
+    eval_args["positivity_epsilon"]="one_by_sample_size"
+    eval_args["positive_sol_threshold"]=(-1e-10)
 
     #Testing the Uhlers job
     CJ = CompareJobber(graph_args,interv_args,eval_args)

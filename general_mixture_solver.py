@@ -574,7 +574,7 @@ class GeneralMixtureSolver():
         return split_pis
 
 if __name__=="__main__":
-    num_nodes=12
+    num_nodes=4
     node_card=5
     #Creating a random graph
     from graph_generator import GraphGenerator
@@ -599,6 +599,7 @@ if __name__=="__main__":
 
     #Testing by having the sample from mixture distribution
     infinite_sample_limit=False
+    mixture_sample_size=float("inf")
     mixture_samples=None
     if not infinite_sample_limit:
         mixture_sample_size=10000
@@ -611,10 +612,12 @@ if __name__=="__main__":
                             base_network=base_network,
                             do_config=do_config,
                             infinite_sample_limit=infinite_sample_limit,
+                            base_samples=None,
                             mixture_samples=mixture_samples,
                             pi_threshold=(1/16.0)*(0.25),
                             split_threshold=(-1e-10),
                             positivity_epsilon=1.0/mixture_sample_size,
+                            positive_sol_threshold=1e-10,
             )
     pred_target_dict=solver.solve()
 
