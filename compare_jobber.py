@@ -1,9 +1,13 @@
 import numpy as np
+np.random.seed(1)
 import pandas as pd
 import random
 import pdb
 from pprint import pprint
 from collections import defaultdict
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+import multiprocessing as mp
 
 
 import causaldag as cd
@@ -373,6 +377,27 @@ class CompareJobber():
         self.result_dict[sample_size]={"uhler":recall_uhler,"ours":recall_ours}
 
 
+def job_runner(graph_args,interv_args,eval_args,all_sample_sizes,num_job,child_conn):
+    result_list=[]
+    for jidx in range(num_job):
+        result_list.append(
+                        job_kernel(graph_args,
+                                    interv_args,
+                                    eval_args,
+                                    all_sample_sizes
+            )
+        )
+    child_conn.send(result_list)
+    child_conn.close()
+
+
+def job_kernel(graph_args,interv_args,eval_args,all_sample_sizes):
+    CJ = CompareJobber(graph_args,interv_args,eval_args)
+    for sample_size in all_sample_sizes:
+        CJ.compare_given_sample_size("single_mean",sample_size)
+
+    return CJ.result_dict
+
 if __name__=="__main__":
     #Defininte the graph args
     graph_args={}
@@ -383,8 +408,8 @@ if __name__=="__main__":
 
     #Defining the intervention args
     interv_args={}
-    interv_args["sparsity"]=4
-    interv_args["target_size"]=3 #TODO: Maybe we use same graph
+    interv_args["sparsity"]=3
+    interv_args["target_size"]=2 #TODO: Maybe we use same graph
     interv_args["iv_mean"]=1
     interv_args["iv_var"]=0.1
 
@@ -394,15 +419,86 @@ if __name__=="__main__":
     eval_args["u_alpha"]=1e-3
     eval_args["u_alpha_inv"]=1e-3
     #Ours configs
-    eval_args["pi_threshold"]=1e-3
+    eval_args["pi_threshold"]=1e-2*0.5
     eval_args["matching_weight"]=1.0/3.0
     eval_args["split_threshold"]=(-1e-10)
     eval_args["positivity_epsilon"]="one_by_sample_size"
     eval_args["positive_sol_threshold"]=(-1e-10)
 
     #Testing the Uhlers job
-    CJ = CompareJobber(graph_args,interv_args,eval_args)
-    for sample_size in [5000]:
-        CJ.compare_given_sample_size("single_mean",sample_size)
+    num_random_job=100.0
+    all_sample_sizes=(100,200,400,800,1600,3200,6400)
+    all_result_list=[]
 
-    pprint(CJ.result_dict)
+
+    #=========================================================================
+    #=========================== RUN JOB Parallel ============================
+    #=========================================================================
+    #Running the jobs parallely
+    num_cpu = mp.cpu_count()//2
+    all_process_list=[]
+    all_pipe_list=[]
+    for widx in range(num_cpu):
+        print("Started Job:{}".format(widx))
+        #Get number of jobs to run
+        num_jobs = int(np.ceil(num_random_job/num_cpu))
+
+        #Staring the pipe
+        parent_conn, child_conn = mp.Pipe()
+        all_pipe_list.append(parent_conn)
+
+        p = mp.Process(target=job_runner,
+                        args=(graph_args,interv_args,eval_args,
+                                all_sample_sizes,num_jobs,child_conn)
+            )
+        p.start()
+        all_process_list.append(p)
+
+    #Now joining all the process
+    results=[parent_conn.recv() for parent_conn in all_pipe_list]
+    [parent_conn.close() for parent_conn in all_pipe_list]
+    [p.join() for p in all_process_list]
+
+    all_result_list=[]
+    for one_result in results:
+        all_result_list= all_result_list+one_result
+    print("Total Number of Job ran: {}".format(len(all_result_list)))
+
+
+
+    #=========================================================================
+    #=========================== PLOTTING ====================================
+    #=========================================================================
+    #Now we could merge the results in one single plot
+    all_uhler_result = np.array([
+                [result[sample_size]["uhler"] for sample_size in all_sample_sizes]
+                for result in all_result_list
+    ])
+    all_our_result = np.array([
+                [result[sample_size]["ours"] for sample_size in all_sample_sizes]
+                for result in all_result_list
+    ])
+
+    fig,ax = plt.subplots()
+
+    def plot_graph(result,curve_name):
+        x=list(range(len(all_sample_sizes)))
+        mean=np.mean(result,axis=0)
+        q20 =np.quantile(result,0.2,axis=0)
+        q80 =np.quantile(result,0.8,axis=0)
+
+        ax.errorbar(x,mean,yerr=(mean-q20,q80-mean),fmt='o-',alpha=0.6,
+                        capsize=5,capthick=2,linewidth=2,label=curve_name)
+        ax.fill_between(x,q20,q80,alpha=0.1)
+
+
+    plot_graph(all_uhler_result,"uhlers")
+    plot_graph(all_our_result,"ours")
+
+    xlabels=[str(size) for size in all_sample_sizes]
+    ax.set_xticks(list(range(len(all_sample_sizes))))
+    ax.set_xticklabels(xlabels,rotation=45)
+    ax.legend()
+    ax.grid(True)
+    ax.set_ylim(0,1.05)
+    plt.show()
