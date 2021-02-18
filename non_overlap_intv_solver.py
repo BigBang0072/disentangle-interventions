@@ -32,7 +32,7 @@ class DistributionHandler():
     do_graph_cache=None     #Creating none so that they dont share across
                             #instance of the object.
 
-    def __init__(self,base_network,do_config,mixture_samples,
+    def __init__(self,base_network,do_config,base_samples,mixture_samples,
                         infinite_sample_limit,positivity_epsilon):
         #Relearning the base network parameters in case of finite sample limit
         if infinite_sample_limit:
@@ -41,7 +41,8 @@ class DistributionHandler():
             self.base_network=self._relearn_network_cpds_from_sample(
                                         mixture_samples.shape[0],
                                         base_network,
-                                        positivity_epsilon
+                                        base_samples,
+                                        positivity_epsilon,
             )
         #Initializing the do config
         self.do_config=do_config
@@ -55,7 +56,7 @@ class DistributionHandler():
         #Initializing the cache
         self.do_graph_cache={}
 
-    def _relearn_network_cpds_from_sample(self,num_samples,base_network,positivity_epsilon):
+    def _relearn_network_cpds_from_sample(self,num_samples,base_network,base_samples,positivity_epsilon):
         '''
         This function will generate sample from the base distribution and
         then relearn the base graph's CPD in order to simulate the working
@@ -64,12 +65,15 @@ class DistributionHandler():
         print("Relearning the base-dist from samples")
         # assert num_samples!=len(base_network.topo_i2n),"Give num of samples"
         #First of all generating the samples
-        base_samples = base_network.generate_sample_from_mixture(
-                                        do_config=[
-                                                    [[],[],1.0]
-                                            ],
-                                        sample_size=num_samples,
-        )
+        if base_samples is None:
+            base_samples = base_network.generate_sample_from_mixture(
+                                            do_config=[
+                                                        [[],[],1.0]
+                                                ],
+                                            sample_size=num_samples,
+            )
+        else:
+            base_samples=base_samples
         # pdb.set_trace()
 
         #Getting the sate name for each of nodes

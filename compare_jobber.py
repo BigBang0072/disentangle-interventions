@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import random
 import pdb
 
@@ -10,6 +11,11 @@ from causaldag import gauss_invariance_suffstat, gauss_invariance_test, Memoized
 
 
 from graph_generator import GraphGenerator
+from data_handle import BnNetwork
+from non_overlap_intv_solver import DistributionHandler
+from interventionGenerator import InterventionGenerator
+from evaluator import EvaluatePrediction
+from general_mixture_solver import GeneralMixtureSolver
 
 class CompareJobber():
     '''
@@ -51,12 +57,15 @@ class CompareJobber():
 
         #Now we will use the intervention generateor to get the bayesian net
         print("Generating our network")
-        self.o_network = self.graph_generator.generate_bayesian_network(
+        o_network_path = self.graph_generator.generate_bayesian_network(
                                         num_nodes=graph_args["num_nodes"],
                                         node_card=graph_args["node_card"],
                                         num_edges=None,
                                         graph_type=o_adj_mat,
         )
+        self.o_network    =   BnNetwork(o_network_path)
+
+
 
     def generate_u_targets(self,graph_args,interv_args):
         '''
@@ -101,6 +110,11 @@ class CompareJobber():
                                                     target_sample_list)
 
         #Now we will be solving with our approach
+        pred_o_target_dict = self.solve_our_approach(base_samples,
+                                                    target_sample_list)
+
+        #
+
         pdb.set_trace()
 
     def solve_uhler_approach(self,base_samples,target_sample_list):
@@ -122,6 +136,7 @@ class CompareJobber():
 
         #Running their algorithm
         setting_list = [dict(known_interventions=[]) for _ in self.u_target_list]
+        print("Solving the problem with Uhler's Method")
         _,pred_u_target_list = cd.unknown_target_igsp(setting_list,
                                                     set(range(self.graph_args["num_nodes"])),
                                                     ci_tester,
@@ -135,7 +150,74 @@ class CompareJobber():
         This function will be used to make prediction from our method
         '''
         #The first task is to discretize the nodes
-        pass
+        print("Binning the continuous sample")
+        bin_base_samples,bin_mixture_samples = self._discretize_dataset(
+                                                        base_samples,
+                                                        target_sample_list
+        )
+        #Now we have to get the do config once
+
+        #Now we are ready to call our solver
+        print("Solving the problem with our method")
+        #From now on we will be interested in absolute threshold
+        infinite_sample_limit   =   False #Only work with finite numb of sample
+        pi_threshold            =   self.eval_args["pi_threshold"]
+        split_threshold         =   self.eval_args["split_threshold"]
+        positivity_epsilon      =   self.eval_args["positivity_epsilon"]
+        positive_sol_threshold  =   self.eval_args["positive_sol_threshold"]
+
+        if positivity_epsilon=="one_by_sample_size":
+            positivity_epsilon = 1.0/mixture_sample_size
+
+        if infinite_sample_limit:
+            pi_threshold=   1e-10   #Dont mess up with me here
+        #Iniitlizing the solver
+        solver          =   GeneralMixtureSolver(
+                                base_network=self.o_network,
+                                do_config=None,#Dont want inf sample prob
+                                infinite_sample_limit=infinite_sample_limit,
+                                base_samples=bin_base_samples,
+                                mixture_samples=bin_mixture_samples,
+                                pi_threshold=pi_threshold,
+                                split_threshold=split_threshold,
+                                positivity_epsilon=positivity_epsilon,
+                                positive_sol_threshold=positive_sol_threshold
+        )
+        #Getting the prediction
+        pred_target_dict    =   solver.solve()
+
+        return pred_target_dict
+
+    def _discretize_dataset(self,base_samples,target_sample_list):
+        '''
+        Here we will discretize the dataset
+        '''
+        #Converting to one big dataframe
+        all_samples=pd.DataFrame(
+                        np.concatenate([base_samples]+target_sample_list,axis=0)
+                    )
+        #Now cutting the data frame index by index
+        for nidx in range(all_samples.shape[-1]):
+            #Now lets cut this index
+            all_samples[nidx] = pd.cut(all_samples[nidx],
+                                        bins=graph_args["node_card"],
+                                        labels=False,
+                                )
+
+        #Now its time to separate out the whole data frame as numpy
+        all_binned_sample=all_samples.to_numpy()
+
+        #Now we will remove out the base sample and keep the rest of sample
+        binned_base_samples = all_binned_sample[0:base_samples.shape[0]].copy()
+        binned_mixture_samples = all_binned_sample[base_samples.shape[0]:].copy()
+
+        assert (
+            (binned_base_samples.shape[0]+binned_mixture_samples.shape[0])\
+            == (base_samples.shape[0]* (len(target_sample_list)+1))
+        )
+
+        return binned_base_samples, binned_mixture_samples
+
 
 if __name__=="__main__":
     #Defininte the graph args
@@ -154,9 +236,16 @@ if __name__=="__main__":
 
     #Defining the eval args
     eval_args={}
+    #Uhlers configs
     eval_args["u_alpha"]=1e-3
     eval_args["u_alpha_inv"]=1e-3
+    #Ours configs
+    eval_args["pi_threshold"]=1e-3
+    eval_args["matching_weight"]=[1.0/3.0]
+    eval_args["split_threshold"]=[-1e-10]
+    eval_args["positivity_epsilon"]=["one_by_sample_size"]
+    eval_args["positive_sol_threshold"]=[-1e-10]
 
     #Testing the Uhlers job
     CJ = CompareJobber(graph_args,interv_args,eval_args)
-    CJ.compare_given_sample_size(10000)
+    CJ.compare_given_sample_size(1000)

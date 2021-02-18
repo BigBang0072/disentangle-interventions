@@ -70,7 +70,11 @@ class GraphGenerator():
         data handler via a bif file of generated graph.
         '''
         #Getting the wireframe for the graph
-        adj_mat = self.sample_graph(num_nodes,num_edges,graph_type)
+        if isinstance(graph_type,str):
+            adj_mat = self.sample_graph(num_nodes,num_edges,graph_type)
+        else:
+            #Just a hack to accept ahj matrix from outside
+            adj_mat=graph_type
 
         #Creating the bayesian network based on the adj matrix
         network = self._create_network_with_edges(adj_mat)
