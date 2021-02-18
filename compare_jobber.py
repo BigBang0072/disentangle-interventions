@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import random
 import pdb
+from pprint import pprint
+from collections import defaultdict
 
 
 import causaldag as cd
@@ -37,6 +39,9 @@ class CompareJobber():
         #Setting the evaluation args
         self.eval_args=eval_args
 
+        #Initializing the result dict
+        self.result_dict={}
+
     def generate_graph(self,graph_args):
         #Sampling the graph from Uhler's method
         print("Generating the Uhler's Graph")
@@ -65,8 +70,6 @@ class CompareJobber():
         )
         self.o_network    =   BnNetwork(o_network_path)
 
-
-
     def generate_u_targets(self,graph_args,interv_args):
         '''
         This will generate the targets to be used by uhlers method
@@ -78,7 +81,17 @@ class CompareJobber():
                                 interv_args["target_size"]
             ) for _ in range(interv_args["sparsity"])]
 
-    def compare_given_sample_size(self,sample_size):
+        #Now we will generrate all the intervention targets location
+        self.target_locs = [{
+                        target_node: cd.GaussIntervention(
+                            interv_args["iv_mean"],
+                            interv_args["iv_var"]
+                        )
+                        for target_node in target
+                    } for target in self.u_target_list
+            ]
+
+    def compare_given_sample_size(self,mode,sample_size):
         '''
         We will be using the perfect internvetion, since our method is also
         based on the perfect internvetion, which could b a problem if we use
@@ -88,21 +101,12 @@ class CompareJobber():
         print("Generating base sample: size:{}".format(sample_size))
         base_samples = self.u_network.sample(sample_size)
 
-        #Now we will generrate all the intervention targets location
-        target_locs = [{
-                        target_node: cd.GaussIntervention(
-                            interv_args["iv_mean"],
-                            interv_args["iv_var"]
-                        )
-                        for target_node in target
-                    } for target in self.u_target_list
-        ]
         #Generate all the intervention sample seperately
         print("Generating the intervention samples")
         target_sample_list = [
                     self.u_network.sample_interventional(loc,sample_size)
 
-            for loc in target_locs
+            for loc in self.target_locs
         ]
 
         #Now its time to solve the the problem using Uhler's approach
@@ -111,11 +115,14 @@ class CompareJobber():
 
         #Now we will be solving with our approach
         pred_o_target_dict = self.solve_our_approach(base_samples,
-                                                    target_sample_list)
+                                                    target_sample_list,
+                                                    mode,
+                                                    sample_size)
 
-        #
-
-        pdb.set_trace()
+        #Getting the evaluation metrics
+        self.evaluate_both_predictions(pred_u_target_list,
+                                        pred_o_target_dict,
+                                        sample_size)
 
     def solve_uhler_approach(self,base_samples,target_sample_list):
         '''
@@ -145,16 +152,95 @@ class CompareJobber():
         #Saving the predicted target list
         return pred_u_target_list
 
-    def solve_our_approach(self,base_samples,target_sample_list):
+
+    def solve_our_approach(self,base_samples,target_sample_list,mode,sample_size):
         '''
-        This function will be used to make prediction from our method
+        This function will solve with our the three approach and then give
+        the merged result at once.
+
+        Case 1: Give the full mixture at once to solve
+        Case 2: Full mixture:
+                        target 1 ---> solve separately  \ merge result
+                        target 2 ---> solve separately  /
+                        ....
+                        ....
+
+        Case 3: Full Mixutre:
+                        target 1 ---> fixed mean interv ---> solve \ merge
+                        target 2 ---> fixed mean interv ---> solve /
+                        ....
+                        ....
         '''
         #The first task is to discretize the nodes
         print("Binning the continuous sample")
-        bin_base_samples,bin_mixture_samples = self._discretize_dataset(
+        bin_base_samples,bin_mixture_samples,bin_interval_dict = \
+                                    self._discretize_dataset(
                                                         base_samples,
                                                         target_sample_list
         )
+
+        #Now based on the mode we will work accordingly
+        all_prediction_list=[]
+        if mode == "all":
+            #Solve every thing at once
+            pred = self.solve_our_approach_once(bin_base_samples,
+                                                bin_mixture_samples)
+            all_prediction_list.append(pred)
+
+        elif mode =="single":
+            #Solving each sample one by one
+            for tidx,target in enumerate(self.u_target_list):
+                #Splicing the sample for this particular target
+                tbin_sample = bin_mixture_samples[tidx*sample_size:(tidx+1)*sample_size]
+
+                #Now we will solve each of them one by one
+                pred = self.solve_our_approach_once(bin_base_samples,tbin_sample)
+
+                all_prediction_list.append(pred)
+
+
+        elif mode =="single_mean":
+            #Solving each sample one by one
+            for tidx,target in enumerate(self.u_target_list):
+                #Splicing the sample for this particular target
+                tbin_sample = bin_mixture_samples[tidx*sample_size:(tidx+1)*sample_size]
+
+                #First of all we have to make a clean fixed point interv (mean)
+                for nidx in target:
+                    #The value we have to put is
+                    # search_val=self.interv_args["iv_mean"]
+
+                    #Now we have to find the bin for this guy (any one bin is fine)
+                    bin_num =int(self.graph_args["node_card"]/2)
+                    # bin_num=len(bin_intervals)-2 #default is last bin
+                    # for bidx in range(0,bin_intervals.shape[0]-1):
+                    #     if search_val<=bin_intervals[bidx+1]:
+
+                    #Putting this random intervention everywhere in this sample
+                    tbin_sample[str(nidx)]=bin_num
+
+
+                #Now we will solve each of them one by one
+                pred = self.solve_our_approach_once(bin_base_samples,tbin_sample)
+
+                all_prediction_list.append(pred)
+        else:
+            raise NotImplementedError
+
+        #Now its time to merge all the bins in once single place
+        # pdb.set_trace()
+        merged_prediction=defaultdict(float)
+        for preds in all_prediction_list:
+            for target,pi in preds.items():
+                merged_prediction[target]+=pi
+
+        return merged_prediction
+
+
+    def solve_our_approach_once(self,bin_base_samples,bin_mixture_samples):
+        '''
+        This function will be used to make prediction from our method
+        '''
         #Now we have to get the do config once
 
         #Now we are ready to call our solver
@@ -167,7 +253,7 @@ class CompareJobber():
         positive_sol_threshold  =   self.eval_args["positive_sol_threshold"]
 
         if positivity_epsilon=="one_by_sample_size":
-            positivity_epsilon = 1.0/base_samples.shape[0]
+            positivity_epsilon = 1.0/bin_base_samples.shape[0]
 
         if infinite_sample_limit:
             pi_threshold=   1e-10   #Dont mess up with me here
@@ -184,7 +270,7 @@ class CompareJobber():
                                 positive_sol_threshold=positive_sol_threshold
         )
         #Getting the prediction
-        pred_target_dict    =   solver.solve()
+        pred_target_dict    =   self._simplify_our_prediction(solver.solve())
 
         return pred_target_dict
 
@@ -197,12 +283,16 @@ class CompareJobber():
                         np.concatenate([base_samples]+target_sample_list,axis=0)
                     )
         #Now cutting the data frame index by index
+        bin_interval_dict={}
         for nidx in range(all_samples.shape[-1]):
             #Now lets cut this index
-            all_samples[nidx] = pd.cut(all_samples[nidx],
+            all_samples[nidx],bins = pd.cut(all_samples[nidx],
                                         bins=graph_args["node_card"],
                                         labels=False,
+                                        retbins=True
                                 )
+            bin_interval_dict[nidx]=bins
+
 
         #Now its time to separate out the whole data frame as numpy
         all_binned_sample=all_samples
@@ -220,7 +310,67 @@ class CompareJobber():
             == (base_samples.shape[0]* (len(target_sample_list)+1))
         )
 
-        return binned_base_samples, binned_mixture_samples
+        return binned_base_samples, binned_mixture_samples,bin_interval_dict
+
+    def _simplify_our_prediction(self,pred_target_dict):
+        '''
+        Lets first merge all the prediction which have the same node as one
+        and get thier mixing coefficient also
+        '''
+        simple_pred_target_dict={}
+        for tname,(tnode,_,tpi) in pred_target_dict.items():
+            if tuple(tnode) in simple_pred_target_dict:
+                simple_pred_target_dict[tuple(tnode)]+=tpi
+            else:
+                simple_pred_target_dict[tuple(tnode)]=tpi
+
+        return simple_pred_target_dict
+
+    def evaluate_both_predictions(self,ulist,odict,sample_size):
+        '''
+        This function will get the recall for both the methods
+        '''
+        #Lets first hash all the targets
+        actual_target_dict = {"at{}".format(tidx):set(target)
+                                for tidx,target in enumerate(self.u_target_list)
+                            }
+        pred_uhler = {
+                            "ut{}".format(tidx):set(target)
+                            for tidx,target in enumerate(ulist)
+        }
+        pred_ours = {
+                            "ot{}".format(tidx):set(target)
+                            for tidx,target in enumerate(odict.keys())
+        }
+
+        #Get the recall of a prediction
+        def get_recall(actual,pred):
+            #Cehckin for all the targets(its possible that two target is same)
+            true_pos=0.0
+            for _,atarget in actual.items():
+                #which of the target is present in the prediction
+                for _,ptarget in pred.items():
+                    if(atarget==ptarget):
+                        true_pos+=1.0
+                        break
+
+            recall = true_pos / len(actual)
+            return recall
+
+        recall_uhler = get_recall(actual_target_dict,pred_uhler)
+        recall_ours = get_recall(actual_target_dict,pred_ours)
+
+        print("=========================\nActual Targets:")
+        pprint(actual_target_dict)
+        print("=========================\nUhler's Prediction:")
+        pprint(pred_uhler)
+        print("=========================\nOur's Prediction:")
+        pprint(pred_ours)
+
+        print("uhler:{}\tours:{}".format(recall_uhler,recall_ours))
+        # pdb.set_trace()
+        #Saving the result
+        self.result_dict[sample_size]={"uhler":recall_uhler,"ours":recall_ours}
 
 
 if __name__=="__main__":
@@ -252,4 +402,7 @@ if __name__=="__main__":
 
     #Testing the Uhlers job
     CJ = CompareJobber(graph_args,interv_args,eval_args)
-    CJ.compare_given_sample_size(1000)
+    for sample_size in [5000]:
+        CJ.compare_given_sample_size("single_mean",sample_size)
+
+    pprint(CJ.result_dict)
