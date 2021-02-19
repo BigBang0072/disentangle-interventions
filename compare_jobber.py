@@ -8,6 +8,8 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import multiprocessing as mp
+import json
+import pathlib
 
 
 import causaldag as cd
@@ -45,6 +47,7 @@ class CompareJobber():
 
         #Initializing the result dict
         self.result_dict={}
+        self.prediction_dict={}
 
     def generate_graph(self,graph_args):
         #Sampling the graph from Uhler's method
@@ -114,19 +117,24 @@ class CompareJobber():
         ]
 
         #Now its time to solve the the problem using Uhler's approach
-        pred_u_target_list = self.solve_uhler_approach(base_samples,
+        ufpr, upred_list = self.solve_uhler_approach(base_samples,
                                                     target_sample_list)
 
         #Now we will be solving with our approach
-        pred_o_target_dict = self.solve_our_approach(base_samples,
+        ofpr, opred_list = self.solve_our_approach(base_samples,
                                                     target_sample_list,
                                                     mode,
                                                     sample_size)
 
         #Getting the evaluation metrics
-        self.evaluate_both_predictions(pred_u_target_list,
-                                        pred_o_target_dict,
-                                        sample_size)
+        # self.evaluate_both_predictions(pred_u_target_list,
+        #                                 pred_o_target_dict,
+        #                                 sample_size)
+        #Saving the result both in json and in result dict
+        self.result_dict[sample_size]={"uhler":ufpr,"ours":ofpr}
+        self.prediction_dict[sample_size]={"ours":opred_list,"uhler":upred_list}
+        # pdb.set_trace()
+
 
     def solve_uhler_approach(self,base_samples,target_sample_list):
         '''
@@ -153,9 +161,20 @@ class CompareJobber():
                                                     ci_tester,
                                                     invariance_tester
                             )
-        #Saving the predicted target list
-        return pred_u_target_list
+        #Converting the set prediction to list
+        pred_u_target_list=[[int(node) for node in pred] for pred in pred_u_target_list]
 
+        #Calculating the false positive rate
+        true_positive=0.0
+        for aidx,actual_target in enumerate(self.u_target_list):
+            if self._check_target_equality(actual_target,pred_u_target_list[aidx]):
+                true_positive+=1
+
+        false_positive_rate = self._calculate_false_positive_rate(
+                                                    true_positive,
+                                                    len(self.u_target_list)
+                                        )
+        return false_positive_rate,pred_u_target_list
 
     def solve_our_approach(self,base_samples,target_sample_list,mode,sample_size):
         '''
@@ -185,13 +204,21 @@ class CompareJobber():
 
         #Now based on the mode we will work accordingly
         all_prediction_list=[]
+        false_positive_rate=None
         if mode == "all":
             #Solve every thing at once
             pred = self.solve_our_approach_once(bin_base_samples,
                                                 bin_mixture_samples)
-            all_prediction_list.append(pred)
+
+            #Getting the top-k prediction
+            top_k_pred = self._get_top_n_predictions(pred,len(self.u_target_list))
+            all_prediction_list = top_k_pred
+            #Now getting the recall value
+            false_positive_rate = self._get_mixture_fpr(top_k_pred.copy())
+            # pdb.set_trace()
 
         elif mode =="single":
+            true_positive=0.0
             #Solving each sample one by one
             for tidx,target in enumerate(self.u_target_list):
                 #Splicing the sample for this particular target
@@ -200,10 +227,20 @@ class CompareJobber():
                 #Now we will solve each of them one by one
                 pred = self.solve_our_approach_once(bin_base_samples,tbin_sample)
 
-                all_prediction_list.append(pred)
+                #Getting the top prediction
+                pred_target = self._get_top_n_predictions(pred,1)[0]
+                all_prediction_list.append(pred_target)
+
+                true_positive += self._check_target_equality(pred_target,target)
+                # pdb.set_trace()
+
+            #Now calculatin the false postitive rate
+            false_positive_rate=self._calculate_false_positive_rate(true_positive,
+                                                len(self.u_target_list))
 
 
         elif mode =="single_mean":
+            true_positive=0.0
             #Solving each sample one by one
             for tidx,target in enumerate(self.u_target_list):
                 #Splicing the sample for this particular target
@@ -226,20 +263,59 @@ class CompareJobber():
 
                 #Now we will solve each of them one by one
                 pred = self.solve_our_approach_once(bin_base_samples,tbin_sample)
+                #Getting the top prediction
+                pred_target = self._get_top_n_predictions(pred,1)[0]
+                all_prediction_list.append(pred_target)
 
-                all_prediction_list.append(pred)
+                true_positive += self._check_target_equality(pred_target,target)
+
+            #Now calculatin the false postitive rate
+            false_positive_rate=self._calculate_false_positive_rate(true_positive,
+                                                len(self.u_target_list))
         else:
             raise NotImplementedError
 
         #Now its time to merge all the bins in once single place
         # pdb.set_trace()
-        merged_prediction=defaultdict(float)
-        for preds in all_prediction_list:
-            for target,pi in preds.items():
-                merged_prediction[target]+=pi
+        return false_positive_rate,all_prediction_list
 
-        return merged_prediction
+    def _get_mixture_fpr(self,pred_list):
+        true_positive = 0.0
+        for actual_target in self.u_target_list:
+            for pred_target in pred_list:
+                #Check if they are same
+                if self._check_target_equality(actual_target,pred_target):
+                    true_positive+=1
+                    #Removing the guy so that we dont recount
+                    pred_list.remove(pred_target)
+                    break
 
+        #fpr
+        false_positive_rate = self._calculate_false_positive_rate(
+                                                true_positive,
+                                                len(self.u_target_list)
+                                    )
+        return false_positive_rate
+
+    def _calculate_false_positive_rate(self,true_pos,num_actual):
+        return (num_actual-true_pos)*1.0/num_actual
+
+    def _check_target_equality(self,pt1,pt2):
+        '''
+        '''
+        if (set(pt1)==set(pt2)):
+            return True
+        return False
+
+    def _get_top_n_predictions(self,pred,n):
+        '''
+        Given a merged prediction dictionary we willl give the top n candidate
+        based on the mixing coefficient.
+        '''
+        pred_list = [(target,pi) for target,pi in pred.items()]
+        pred_list.sort(reverse=True, key=lambda x: x[-1])
+
+        return [pred_list[idx][0] for idx in range(min(n,len(pred_list)))]
 
     def solve_our_approach_once(self,bin_base_samples,bin_mixture_samples):
         '''
@@ -377,13 +453,19 @@ class CompareJobber():
         self.result_dict[sample_size]={"uhler":recall_uhler,"ours":recall_ours}
 
 
-def job_runner(graph_args,interv_args,eval_args,all_sample_sizes,num_job,child_conn):
+def job_runner(experiment_id,worker_id,
+                graph_args,interv_args,eval_args,mode,
+                all_sample_sizes,num_job,child_conn):
     result_list=[]
     for jidx in range(num_job):
         result_list.append(
-                        job_kernel(graph_args,
+                        job_kernel(experiment_id,
+                                    worker_id,
+                                    jidx,
+                                    graph_args,
                                     interv_args,
                                     eval_args,
+                                    mode,
                                     all_sample_sizes
             )
         )
@@ -391,10 +473,27 @@ def job_runner(graph_args,interv_args,eval_args,all_sample_sizes,num_job,child_c
     child_conn.close()
 
 
-def job_kernel(graph_args,interv_args,eval_args,all_sample_sizes):
+def job_kernel(experiment_id,worker_id,job_id,
+                graph_args,interv_args,eval_args,
+                mode,all_sample_sizes):
+    # modes=["all","single","single_mean"]
     CJ = CompareJobber(graph_args,interv_args,eval_args)
     for sample_size in all_sample_sizes:
-        CJ.compare_given_sample_size("single_mean",sample_size)
+        CJ.compare_given_sample_size(mode,sample_size)
+
+    #Creating payload to dump in json
+    dump_payload={}
+    dump_payload["false_positive_rate"]=CJ.result_dict
+    dump_payload["all_prediction_list"]=CJ.prediction_dict
+    dump_payload["actual_target_list"]=CJ.u_target_list
+    dump_payload["mode"]=mode
+    dump_payload["graph_args"]=graph_args
+    dump_payload["interv_args"]=interv_args
+    dump_payload["eval_args"]=eval_args
+
+    fname = "{}/w{}_j{}.json".format(experiment_id,worker_id,job_id)
+    with open(fname,"w") as fp:
+        json.dump(dump_payload,fp,indent="\t")
 
     return CJ.result_dict
 
@@ -426,9 +525,15 @@ if __name__=="__main__":
     eval_args["positive_sol_threshold"]=(-1e-10)
 
     #Testing the Uhlers job
-    num_random_job=100.0
+    num_random_job=10.0
+    mode = "single_mean"        #["all","single","single_mean"] lets do one by one
     all_sample_sizes=(100,200,400,800,1600,3200,6400)
     all_result_list=[]
+    experiment_id="comp-exp-1"
+    pathlib.Path(experiment_id).mkdir(parents=True,exist_ok=True)
+
+    # job_runner(0,0,graph_args,interv_args,eval_args,mode,all_sample_sizes,
+    #             1,None)
 
 
     #=========================================================================
@@ -448,7 +553,8 @@ if __name__=="__main__":
         all_pipe_list.append(parent_conn)
 
         p = mp.Process(target=job_runner,
-                        args=(graph_args,interv_args,eval_args,
+                        args=(experiment_id,widx,
+                                graph_args,interv_args,eval_args,mode,
                                 all_sample_sizes,num_jobs,child_conn)
             )
         p.start()
