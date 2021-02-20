@@ -1,4 +1,9 @@
 import matplotlib.pyplot as plt
+from matplotlib import rc
+rc('axes',  labelsize=15)
+rc('legend', fontsize=10)
+
+
 import json
 import pandas as pd
 import numpy as np
@@ -45,6 +50,8 @@ class Plotter():
             #Directly loading the df from excel
             expt_df=pd.read_csv(tsv_path,sep="\t")
             # pdb.set_trace()
+            #Just sample the SF type of graph
+            # expt_df=expt_df[expt_df["graph_type"]=="SF"]
         except:
             #Converting the results into df
             expt_df = pd.DataFrame(self.all_expt_json)
@@ -60,7 +67,8 @@ class Plotter():
         #Getting the unique sample sizes
         sample_sizes=expt_df.mixture_sample_size.unique().tolist()
         sample_sizes.sort()
-        # sample_sizes.remove(float("inf"))
+        if float("inf") in sample_sizes:
+            sample_sizes.remove(float("inf"))
 
         #Getting the evaluation metric by the group criteria
         js_dict,mse_dict,gratio_dict=\
@@ -207,9 +215,12 @@ class Plotter():
         self._plot_on_one_axis(ax[1],sample_sizes,mse_dict,gratio_dict,False,
                                                             group_criteria)
 
-        fig.suptitle("Evaluation Metrics with level-curve wrt : {}".format(
-                                                            group_criteria))
-        plt.show()
+        # fig.suptitle("Evaluation Metrics with level-curve wrt : {}".format(
+        #                                                     group_criteria))
+        fig.set_size_inches(20, 9)
+        fig.savefig('fig.png',bbox_inches="tight", dpi=200)
+        # plt.show()
+        # plt.savefig("node_er.png",dpi=200)
 
 
     def _plot_on_one_axis(self,ax,sample_sizes,metric_dict,gratio_dict,is_js,
@@ -227,21 +238,21 @@ class Plotter():
                                 for sidx,size in enumerate(sample_sizes)]
 
             #preparing the level-curve name
-            curve_name = "{0:}={1:} : expt_ratio={2:0.2f}".format(
+            curve_name = "{0:}={1:}".format(
                                                         group_criteria,
                                                         gname,
                                                         gratio_dict[gname])
 
 
-            ax.errorbar(xval,yval,yerr=(yq25,yq75),fmt='o-',alpha=0.6,
+            ax.errorbar(xval,yval,fmt='o-',alpha=0.6,
                             capsize=5,capthick=2,linewidth=2,label=curve_name)
 
             #Plotting by filling in between the error
-            ax.fill_between(xval,yval-yq25,yval+yq75,alpha=0.1)
+            # ax.fill_between(xval,yval-yq25,yval+yq75,alpha=0.1)
 
 
         #Now we are done with the plotting, lets beautiy it
-        xlabels = [str(size) for size in sample_sizes]
+        xlabels = [str(int(size)) for size in sample_sizes]
         ax.set_xticks(xval)
         ax.set_xticklabels(xlabels,rotation=45)
         ax.set_xlabel("Sample Size")
@@ -250,17 +261,17 @@ class Plotter():
         if is_js:
             ax.legend(loc="upper left")
             ax.set_ylim(0,1.05)
-            ax.set_ylabel("Average Weighted-Jaccard-Similarity")
+            ax.set_ylabel("Average Recall of Intervention Targets")
         else:
             ax.legend(loc="upper right")
             #ax.set_ylim(0,2.0/4.0)
-            ax.set_ylabel("Average MSE in Mixing Coefficient")
+            ax.set_ylabel("Average RMSE in Mixing Coefficient")
 
         #Setting the grid
         ax.grid(True)
 
 
 if __name__=="__main__":
-    experiment_id="gasinha-exp11"
+    experiment_id="gasinha-exp13"
     plotter = Plotter(experiment_id)
-    plotter.plot_evaluation_metrics(group_criteria="graph_type")
+    plotter.plot_evaluation_metrics(group_criteria=["graph_type","num_nodes"])
