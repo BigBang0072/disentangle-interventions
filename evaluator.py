@@ -72,25 +72,39 @@ class EvaluatePrediction():
             matched_pred_dict[pred_name]=True
 
         #Now its possible that some of targets are not matched
+        actual_left_pi_diff=[]
         if len(matched_actual_dict)!=len(actual_target_dict):
             self._add_unmatched_target_score(actual_target_dict,
                                             matched_actual_dict,
                                             matched_score_list,
-                                            matched_pi_diff)
+                                            actual_left_pi_diff)
+
+        #Getting the pis of targets which are not matched in prediction
+        pred_left_pi_diff=[]
         if len(matched_pred_dict)!=len(pred_target_dict):
             self._add_unmatched_target_score(pred_target_dict,
                                             matched_pred_dict,
                                             matched_score_list,
-                                            matched_pi_diff)
+                                            pred_left_pi_diff)
 
         #Now calculating the average score and mse
         recall = np.sum(matched_score_list)/len(actual_target_dict)
         precision = np.sum(matched_score_list)/len(pred_target_dict)
-        avg_mse = (np.mean(np.array(matched_pi_diff)**2))**(0.5)
 
-        print("Score: recall:{}\t precision:{}\t avg_mse:{}".format(recall,precision,avg_mse))
+        #Now segregating the mean squared error
+        mse_all = {}
+        mse_all["mse_present_actual"]  = self._get_l2_norm(actual_left_pi_diff)
+        mse_all["mse_present_pred"]    = self._get_l2_norm(pred_left_pi_diff)
+        mse_all["mse_present_both"]    = self._get_l2_norm(matched_pi_diff)
+        mse_all["mse_overall"]  = self._get_l2_norm(matched_pi_diff+actual_left_pi_diff+pred_left_pi_diff)
+        #avg_mse = (np.mean(np.array(matched_pi_diff)**2))**(0.5)
 
-        return recall,precision,avg_mse
+        print("Score: recall:{}\t precision:{}\t avg_mse:{}".format(recall,precision,mse_all))
+
+        return recall,precision,mse_all
+
+    def _get_l2_norm(self,arr_list):
+        return np.mean(np.array(arr_list)**2)**(0.5)
 
     def _add_unmatched_target_score(self,target_dict,matched_names,matched_score_list,matched_pi_diff):
         #Iterating over the target dict
