@@ -4,6 +4,8 @@ import pdb
 from pprint import pprint
 from collections import defaultdict
 from toposort import toposort_flatten
+import itertools as it
+from scipy.stats import dirichlet
 
 from data_handle import BnNetwork
 from non_overlap_intv_solver import DistributionHandler
@@ -572,6 +574,118 @@ class GeneralMixtureSolver():
             print("tname:{}\t upscaling_spi:{}".format(tname,split_pis))
 
         return split_pis
+
+    def solve_by_em(self,max_target_order,epochs):
+        '''
+        This function will take a different route to get the mixing coefficient
+        by estimating the mixing coefficients by Expectation Maximization.
+
+        Caution:
+        This function generate all the possible internvetions as a candidate
+        and then update their posterior based on the evidence.
+        So, for a larger sized graph there could be exponentially many
+        possible intervention targets which could fill up the RAM. 
+
+        Arguments:
+            max_target_order    : the degree/order of intervention possible
+                                    in the mixture. We will only search all
+                                    possible intenrvention upto this order.
+                                    This could at max be of "num_nodes" 
+                                    degree. But with prior knowledge it 
+                                    there could be upper bound on order
+                                    of the interventions.
+        '''
+        #First of all we generate all possible internvetion targets
+        all_target_dict = self._generate_all_possible_targets(max_target_order)
+        all_target_keys,all_target_pi = zip(*all_target_dict.items())
+        all_target_pi = np.array(all_target_pi,dtype=np.float64)
+
+        #Now running the EM algorithm given number of epochs
+        for enum in range(epochs):
+            print("\n\n\nRunning one EM Step:")
+            all_target_pi = self._run_em_step_once(
+                                        all_target_keys,
+                                        all_target_pi
+            )
+            print("Target Pi:\n")
+            pprint(all_target_pi)
+        
+    def _run_em_step_once(self,all_target_keys,all_target_pi):
+        '''
+        This function will run the em step once by calculating the 
+        posterior and then updating the model parameters.
+        '''
+        posterior_pi = all_target_pi * 0.0
+
+        #Go through all the examples one by one to get posterior
+        num_examples = self.dist_handler.mixture_samples.shape[0]
+        for eidx in range(num_examples):
+            #Getting the point/"example" from the df
+            point = self.dist_handler.mixture_samples.iloc[eidx]
+
+            #get the probability of this sample on all targets
+            sample_posterior_pi = all_target_pi * 0.0
+            for tidx,target in enumerate(all_target_keys):
+                tprob = self.dist_handler.get_intervention_probability(
+                                            sample=point,
+                                            eval_do=target
+                )
+                #Updating the prob in sample _posterior_pi
+                sample_posterior_pi[tidx]=tprob
+            
+            #Next we multiply the pis and normalize
+            sample_posterior_pi = sample_posterior_pi*all_target_pi
+            sample_posterior_pi = sample_posterior_pi/np.sum(sample_posterior_pi)
+
+            #Adding the contribution of this posterior controbution
+            posterior_pi = posterior_pi + sample_posterior_pi
+        
+        #Now we need to average the posterior pi
+        posterior_pi = posterior_pi / num_examples
+
+        return posterior_pi
+
+    def _generate_all_possible_targets(self,max_target_order):
+        '''
+        This function will generate all possible intervention target
+        upto a given order of intervention.
+        '''
+        max_target_order = min(max_target_order,
+                                len(self.base_network.topo_i2n)
+        )
+        node_idxs = list(self.base_network.topo_i2n.keys())
+
+        all_target_dict={}
+        #Now creating the intervnetion targets order by order
+        for oidx in range(0,max_target_order+1):
+            #First of all we will generate all the nidx combination
+            comb_nidx = it.combinations(node_idxs,oidx)
+
+            #Next we need to generate all possible setting of all target nodes
+            for tnidxs in comb_nidx:
+                #Generating all possible assignment of this target nodes
+                cidx_list=[range(
+                        self.base_network.card_node[self.base_network.topo_i2n[nidx]]
+                    )
+                    for nidx in tnidxs
+                ]
+                #Getting all setting of all these nodes in this target
+                tsettings = it.product(*cidx_list)
+
+                #Now we will create them as separate target
+                for tset in tsettings:
+                    all_target_dict[(tnidxs,tset)]=0.0
+        
+        #Now we need to initialize these mixing coefficient randomly
+        mixing_coeffs = dirichlet.rvs(
+                                size=len(all_target_dict),
+                                alpha=np.ones(len(all_target_dict)),
+        )
+        for tidx,target in enumerate(all_target_dict):
+            all_target_dict[target]=mixing_coeffs[tidx]
+        
+        return all_target_dict
+
 
 if __name__=="__main__":
     num_nodes=4
