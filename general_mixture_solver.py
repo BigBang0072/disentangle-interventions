@@ -610,6 +610,13 @@ class GeneralMixtureSolver():
             print("Target Pi:\n")
             pprint(all_target_pi)
         
+        #Returning the predicted target dict
+        pred_target_dict={}
+        for tidx,target in enumerate(all_target_keys):
+            pred_target_dict["t{}".format(tidx)]=[target[0],target[1],all_target_pi[tidx]]
+        
+        return pred_target_dict
+        
     def _run_em_step_once(self,all_target_keys,all_target_pi):
         '''
         This function will run the em step once by calculating the 
@@ -688,8 +695,8 @@ class GeneralMixtureSolver():
 
 
 if __name__=="__main__":
-    num_nodes=4
-    node_card=5
+    num_nodes=2
+    node_card=3
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
@@ -712,7 +719,7 @@ if __name__=="__main__":
     do_config = target_generator.generate_all_targets()
 
     #Testing by having the sample from mixture distribution
-    infinite_sample_limit=False
+    infinite_sample_limit=True
     mixture_sample_size=float("inf")
     mixture_samples=None
     if not infinite_sample_limit:
@@ -733,7 +740,10 @@ if __name__=="__main__":
                             positivity_epsilon=1.0/mixture_sample_size,
                             positive_sol_threshold=1e-10,
             )
-    pred_target_dict=solver.solve()
+    pred_target_dict=solver.solve_by_em(
+                                maximum_target_order=num_nodes,
+                                epochs=3,
+    )
 
     #Now lets evaluate the solution
     evaluator = EvaluatePrediction(matching_weight=0.5)
