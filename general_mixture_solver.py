@@ -576,7 +576,7 @@ class GeneralMixtureSolver():
 
         return split_pis
 
-    def solve_by_em(self,max_target_order,epochs):
+    def solve_by_em(self,max_target_order,epochs,log_epsilon):
         '''
         This function will take a different route to get the mixing coefficient
         by estimating the mixing coefficients by Expectation Maximization.
@@ -608,6 +608,7 @@ class GeneralMixtureSolver():
         #Now running the EM algorithm given number of epochs
         pred_target_dict=None
         mse_overall_list=[]
+        avg_logprob_list=[]
         for enum in range(1,epochs+1):
             print("\n\n\nRunning one EM Step:")
             all_target_pi = self._run_em_step_once(
@@ -626,6 +627,14 @@ class GeneralMixtureSolver():
             _,_,mse_all=evaluator.get_evaluation_scores(pred_target_dict,do_config)
             mse_overall_list.append(mse_all["mse_overall"])
 
+            #Next we will estimate the likelihood of the optimizer
+            avg_logprob_list.append(
+                        self._get_loglikelihood(all_target_keys,
+                                                all_target_pi,
+                                                log_epsilon,
+                        )
+            )
+
             #Plotting the evaluation metrics
             # if enum%5==0:
             #     plt.plot(range(len(mse_overall_list)),mse_overall_list,"o-")
@@ -633,7 +642,33 @@ class GeneralMixtureSolver():
             #     plt.close()
 
 
-        return pred_target_dict,mse_overall_list
+        return pred_target_dict,mse_overall_list,avg_logprob_list
+
+    def _get_loglikelihood(self,all_target_keys,all_target_pi,log_epsilon):
+        '''
+        This function will return the log likelihood of data given the current
+        mixture parameters.
+        '''
+        overall_logprob=0.0
+        num_examples = self.dist_handler.mixture_samples.shape[0]
+        for eidx in range(num_examples):
+            #Getting the point/"example" from the df
+            point = self.dist_handler.mixture_samples.iloc[eidx]
+
+            #get the probability of this sample on all targets
+            sample_prob_sum=0.0
+            for tidx,target in enumerate(all_target_keys):
+                tprob = self.dist_handler.get_intervention_probability(
+                                            sample=point,
+                                            eval_do=list(target)
+                )
+                #Updating the prob in sample _posterior_pi
+                sample_prob_sum+= tprob*all_target_pi[tidx]
+
+            #Next we calculate the lop probability of sample
+            overall_logprob += np.log(sample_prob_sum+log_epsilon)
+
+        return overall_logprob/num_examples
 
     def _run_em_step_once(self,all_target_keys,all_target_pi):
         '''
@@ -760,15 +795,22 @@ if __name__=="__main__":
                             positivity_epsilon=1.0/mixture_sample_size,
                             positive_sol_threshold=1e-10,
             )
-    pred_target_dict,mse_overall_list=solver.solve_by_em(
+    pred_target_dict_em,mse_overall_list,avg_logprob_list=solver.solve_by_em(
                                 max_target_order=num_nodes,
                                 epochs=30,
+                                log_epsilon=1e-10,
     )
 
     #Plotting the evaluation metrics
     plt.plot(range(len(mse_overall_list)),mse_overall_list,"o-")
     plt.show()
+    plt.close()
+    plt.plot(range(len(avg_logprob_list)),avg_logprob_list,"o-")
+    plt.show()
+
+    #Now we will solve the mixture via our methods
+    pred_target_dict_ours = solver.solve()
 
     #Now lets evaluate the solution
     evaluator = EvaluatePrediction(matching_weight=0.5)
-    evaluator.get_evaluation_scores(pred_target_dict,do_config)
+    evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
