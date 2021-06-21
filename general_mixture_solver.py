@@ -6,6 +6,7 @@ from collections import defaultdict
 from toposort import toposort_flatten
 import itertools as it
 from scipy.stats import dirichlet
+import matplotlib.pyplot as plt
 
 from data_handle import BnNetwork
 from non_overlap_intv_solver import DistributionHandler
@@ -601,8 +602,13 @@ class GeneralMixtureSolver():
         all_target_pi = np.array(all_target_pi,dtype=np.float64)
         # pdb.set_trace()
 
+        #Creating the evaluation function
+        evaluator = EvaluatePrediction(matching_weight=0.5)
+
         #Now running the EM algorithm given number of epochs
-        for enum in range(epochs):
+        pred_target_dict=None
+        mse_overall_list=[]
+        for enum in range(1,epochs+1):
             print("\n\n\nRunning one EM Step:")
             all_target_pi = self._run_em_step_once(
                                         all_target_keys,
@@ -611,12 +617,23 @@ class GeneralMixtureSolver():
             print("Target Pi:\n")
             pprint(all_target_pi)
 
-        #Returning the predicted target dict
-        pred_target_dict={}
-        for tidx,target in enumerate(all_target_keys):
-            pred_target_dict["t{}".format(tidx)]=[target[0],target[1],all_target_pi[tidx]]
+            #Returning the predicted target dict
+            pred_target_dict={}
+            for tidx,target in enumerate(all_target_keys):
+                pred_target_dict["t{}".format(tidx)]=[target[0],target[1],all_target_pi[tidx]]
 
-        return pred_target_dict
+            #Getting the evaluation score
+            _,_,mse_all=evaluator.get_evaluation_scores(pred_target_dict,do_config)
+            mse_overall_list.append(mse_all["mse_overall"])
+
+            #Plotting the evaluation metrics
+            # if enum%5==0:
+            #     plt.plot(range(len(mse_overall_list)),mse_overall_list,"o-")
+            #     plt.show()
+            #     plt.close()
+
+
+        return pred_target_dict,mse_overall_list
 
     def _run_em_step_once(self,all_target_keys,all_target_pi):
         '''
@@ -627,6 +644,7 @@ class GeneralMixtureSolver():
 
         #Go through all the examples one by one to get posterior
         num_examples = self.dist_handler.mixture_samples.shape[0]
+        #This could be parallelized on multiple threads.
         for eidx in range(num_examples):
             #Getting the point/"example" from the df
             point = self.dist_handler.mixture_samples.iloc[eidx]
@@ -742,10 +760,14 @@ if __name__=="__main__":
                             positivity_epsilon=1.0/mixture_sample_size,
                             positive_sol_threshold=1e-10,
             )
-    pred_target_dict=solver.solve_by_em(
+    pred_target_dict,mse_overall_list=solver.solve_by_em(
                                 max_target_order=num_nodes,
-                                epochs=3,
+                                epochs=30,
     )
+
+    #Plotting the evaluation metrics
+    plt.plot(range(len(mse_overall_list)),mse_overall_list,"o-")
+    plt.show()
 
     #Now lets evaluate the solution
     evaluator = EvaluatePrediction(matching_weight=0.5)
