@@ -584,14 +584,14 @@ class GeneralMixtureSolver():
         This function generate all the possible internvetions as a candidate
         and then update their posterior based on the evidence.
         So, for a larger sized graph there could be exponentially many
-        possible intervention targets which could fill up the RAM. 
+        possible intervention targets which could fill up the RAM.
 
         Arguments:
             max_target_order    : the degree/order of intervention possible
                                     in the mixture. We will only search all
                                     possible intenrvention upto this order.
-                                    This could at max be of "num_nodes" 
-                                    degree. But with prior knowledge it 
+                                    This could at max be of "num_nodes"
+                                    degree. But with prior knowledge it
                                     there could be upper bound on order
                                     of the interventions.
         '''
@@ -599,6 +599,7 @@ class GeneralMixtureSolver():
         all_target_dict = self._generate_all_possible_targets(max_target_order)
         all_target_keys,all_target_pi = zip(*all_target_dict.items())
         all_target_pi = np.array(all_target_pi,dtype=np.float64)
+        # pdb.set_trace()
 
         #Now running the EM algorithm given number of epochs
         for enum in range(epochs):
@@ -609,17 +610,17 @@ class GeneralMixtureSolver():
             )
             print("Target Pi:\n")
             pprint(all_target_pi)
-        
+
         #Returning the predicted target dict
         pred_target_dict={}
         for tidx,target in enumerate(all_target_keys):
             pred_target_dict["t{}".format(tidx)]=[target[0],target[1],all_target_pi[tidx]]
-        
+
         return pred_target_dict
-        
+
     def _run_em_step_once(self,all_target_keys,all_target_pi):
         '''
-        This function will run the em step once by calculating the 
+        This function will run the em step once by calculating the
         posterior and then updating the model parameters.
         '''
         posterior_pi = all_target_pi * 0.0
@@ -635,18 +636,18 @@ class GeneralMixtureSolver():
             for tidx,target in enumerate(all_target_keys):
                 tprob = self.dist_handler.get_intervention_probability(
                                             sample=point,
-                                            eval_do=target
+                                            eval_do=list(target)
                 )
                 #Updating the prob in sample _posterior_pi
                 sample_posterior_pi[tidx]=tprob
-            
+
             #Next we multiply the pis and normalize
             sample_posterior_pi = sample_posterior_pi*all_target_pi
             sample_posterior_pi = sample_posterior_pi/np.sum(sample_posterior_pi)
 
             #Adding the contribution of this posterior controbution
             posterior_pi = posterior_pi + sample_posterior_pi
-        
+
         #Now we need to average the posterior pi
         posterior_pi = posterior_pi / num_examples
 
@@ -682,15 +683,16 @@ class GeneralMixtureSolver():
                 #Now we will create them as separate target
                 for tset in tsettings:
                     all_target_dict[(tnidxs,tset)]=0.0
-        
+
         #Now we need to initialize these mixing coefficient randomly
-        mixing_coeffs = dirichlet.rvs(
-                                size=len(all_target_dict),
+        mixing_coeffs = np.squeeze(dirichlet.rvs(
+                                size=1,
                                 alpha=np.ones(len(all_target_dict)),
-        )
+        ))
+        # pdb.set_trace()
         for tidx,target in enumerate(all_target_dict):
             all_target_dict[target]=mixing_coeffs[tidx]
-        
+
         return all_target_dict
 
 
@@ -719,7 +721,7 @@ if __name__=="__main__":
     do_config = target_generator.generate_all_targets()
 
     #Testing by having the sample from mixture distribution
-    infinite_sample_limit=True
+    infinite_sample_limit=False
     mixture_sample_size=float("inf")
     mixture_samples=None
     if not infinite_sample_limit:
@@ -732,7 +734,7 @@ if __name__=="__main__":
     solver = GeneralMixtureSolver(
                             base_network=base_network,
                             do_config=do_config,
-                            infinite_sample_limit=infinite_sample_limit,
+                            infinite_sample_limit=True,
                             base_samples=None,
                             mixture_samples=mixture_samples,
                             pi_threshold=(1/16.0)*(0.25),
@@ -741,7 +743,7 @@ if __name__=="__main__":
                             positive_sol_threshold=1e-10,
             )
     pred_target_dict=solver.solve_by_em(
-                                maximum_target_order=num_nodes,
+                                max_target_order=num_nodes,
                                 epochs=3,
     )
 
