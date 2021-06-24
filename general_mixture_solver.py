@@ -750,7 +750,7 @@ class GeneralMixtureSolver():
 
 
 if __name__=="__main__":
-    num_nodes=2
+    num_nodes=4
     node_card=3
     #Creating a random graph
     from graph_generator import GraphGenerator
