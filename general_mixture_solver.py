@@ -681,6 +681,7 @@ class GeneralMixtureSolver():
         num_examples = self.dist_handler.mixture_samples.shape[0]
         #This could be parallelized on multiple threads.
         for eidx in range(num_examples):
+            # print("Getting target distribution for sample: ",eidx,all_target_pi.shape)
             #Getting the point/"example" from the df
             point = self.dist_handler.mixture_samples.iloc[eidx]
 
@@ -750,8 +751,8 @@ class GeneralMixtureSolver():
 
 
 if __name__=="__main__":
-    num_nodes=4
-    node_card=3
+    num_nodes=2
+    node_card=2
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
@@ -778,7 +779,7 @@ if __name__=="__main__":
     mixture_sample_size=float("inf")
     mixture_samples=None
     if not infinite_sample_limit:
-        mixture_sample_size=10000
+        mixture_sample_size=100
         mixture_samples = base_network.generate_sample_from_mixture(
                                             do_config=do_config,
                                             sample_size=mixture_sample_size)

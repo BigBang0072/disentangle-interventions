@@ -8,6 +8,7 @@ import pathlib
 import pdb
 import random
 import sys
+import time
 
 from graph_generator import GraphGenerator
 from data_handle import BnNetwork
@@ -170,8 +171,8 @@ class GeneralMixtureJobber():
                                                         log_fname)
                     )
                     #Conneting the print pipe to log port
-                    sys.stdout = log_port
-                    sys.stderr = log_port
+                    # sys.stdout = log_port
+                    # sys.stderr = log_port
                     print("Starting in a new logfile for job:{}".format(job_id))
                     #Running the jobber for that problem
                     jobber(problem_args)
@@ -319,8 +320,25 @@ def jobber_runner(problem_config,base_network,do_config):
                             positivity_epsilon=positivity_epsilon,
                             positive_sol_threshold=positive_sol_threshold
     )
+    #Solving the problem using em algorithm first
+    em_start_time = time.time()
+    pred_target_dict_em,mse_overall_list,avg_logprob_list=solver.solve_by_em(
+                                max_target_order=problem_config["num_nodes"],
+                                epochs=problem_config["num_em_epochs"],
+                                log_epsilon=1e-10,
+    )
+    em_end_time = time.time()
+
+    #Saving the results from the em into our problem config
+    problem_config["pred_target_dict_em"] = pred_target_dict_em
+    problem_config["mse_overall_list_em"] = mse_overall_list
+    problem_config["avg_logprob_list_em"] = avg_logprob_list
+    problem_config["em_execution_time"]   = em_end_time - em_start_time
+
     #Getting the prediction
+    ours_start_time = time.time()
     pred_target_dict    =   solver.solve()
+    ours_end_time  = time.time()
 
     #Now its time to evaluate
     evaluator           =   EvaluatePrediction(
@@ -331,8 +349,9 @@ def jobber_runner(problem_config,base_network,do_config):
                                 do_config
     )
     #Saving the actual and predicted target dict for later evaluations
-    problem_config["pred_target_dict"]=pred_target_dict
+    problem_config["pred_target_dict_ours"]=pred_target_dict
     problem_config["actual_target_dict"]=evaluator.actual_target_dict
+    problem_config["ours_execution_time"] = ours_end_time - ours_start_time
 
     # if infinite_sample_limit:
     #     assert avg_score==1.0,"Problem in infinite sample limit"
@@ -347,8 +366,8 @@ def jobber_runner(problem_config,base_network,do_config):
 if __name__=="__main__":
     #Initializing the graph args
     graph_args={}
-    graph_args["graph_type"]=["ER","SF"]
-    graph_args["num_nodes"]=[4,8,12]
+    graph_args["graph_type"]=["SF"]
+    graph_args["num_nodes"]=[4]
     graph_args["node_card"]=[3]
     graph_args["num_edges_dist"]=["uniform"] #dist to sample edge from
     graph_args["num_edge_sample"]=[1] #number of random edge per config
@@ -356,7 +375,7 @@ if __name__=="__main__":
 
     #Initializing the sparsity args
     interv_args={}
-    interv_args["sparsity"]= np.random.randint(4,high=16,size=100).tolist()
+    interv_args["sparsity"]= np.random.randint(4,high=16,size=1).tolist()
     interv_args["num_node_T"]=[float("inf")]
     interv_args["pi_dist_type"]=["uniform"]
     interv_args["pi_alpha_scale"]=[2]
@@ -365,7 +384,7 @@ if __name__=="__main__":
     mixture_args={}
     mixture_args["mixture_sample_size"]= list(itertools.product(*
                                         [
-                                            (2**np.arange(4,21)).tolist()+[float("inf")],
+                                            (2**np.arange(4,10)).tolist()+[float("inf")],
                                             [1e-3]
                                         ]
                                 ))
@@ -378,7 +397,7 @@ if __name__=="__main__":
     eval_args["positive_sol_threshold"]=[-1e-10]
 
     #Now we are ready to start our experiments
-    experiment_id="exp41"
+    experiment_id="exp_patent_1.0"
     pathlib.Path(experiment_id).mkdir(parents=True,exist_ok=True)
     shantilal = GeneralMixtureJobber(graph_args,interv_args,mixture_args,eval_args)
     shantilal.run_job_parallely(experiment_id)

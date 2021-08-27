@@ -4,4 +4,4 @@ toposort
 dash
 dash-cytoscape==0.0.5
 dash-bootstrap-components
-python-igraph
+python-igraph==0.9.6
