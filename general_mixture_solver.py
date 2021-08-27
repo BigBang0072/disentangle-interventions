@@ -624,7 +624,10 @@ class GeneralMixtureSolver():
                 pred_target_dict["t{}".format(tidx)]=[target[0],target[1],all_target_pi[tidx]]
 
             #Getting the evaluation score
-            _,_,mse_all=evaluator.get_evaluation_scores(pred_target_dict,do_config)
+            _,_,mse_all=evaluator.get_evaluation_scores(
+                                        pred_target_dict,
+                                        self.dist_handler.do_config,
+            )
             mse_overall_list.append(mse_all["mse_overall"])
 
             #Next we will estimate the likelihood of the optimizer

@@ -1,4 +1,5 @@
-pandas==0.20.3
+numpy==1.15.0
+pandas==0.25.1
 pgmpy==0.1.7
 toposort
 dash

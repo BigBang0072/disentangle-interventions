@@ -1,6 +1,6 @@
 import numpy as np
-from numpy.random import MT19937
-from numpy.random import RandomState, SeedSequence
+# from numpy.random import MT19937
+# from numpy.random import RandomState, SeedSequence
 import time
 
 from scipy.optimize import minimize

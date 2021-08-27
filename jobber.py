@@ -171,8 +171,8 @@ class GeneralMixtureJobber():
                                                         log_fname)
                     )
                     #Conneting the print pipe to log port
-                    # sys.stdout = log_port
-                    # sys.stderr = log_port
+                    sys.stdout = log_port
+                    sys.stderr = log_port
                     print("Starting in a new logfile for job:{}".format(job_id))
                     #Running the jobber for that problem
                     jobber(problem_args)
@@ -375,7 +375,7 @@ if __name__=="__main__":
 
     #Initializing the sparsity args
     interv_args={}
-    interv_args["sparsity"]= np.random.randint(4,high=16,size=1).tolist()
+    interv_args["sparsity"]= np.random.randint(4,high=16,size=100).tolist()
     interv_args["num_node_T"]=[float("inf")]
     interv_args["pi_dist_type"]=["uniform"]
     interv_args["pi_alpha_scale"]=[2]
@@ -391,6 +391,7 @@ if __name__=="__main__":
 
     #Evaluation args
     eval_args={}
+    eval_args["num_em_epochs"]=[30]       #Number of epochs to run the EM
     eval_args["matching_weight"]=[1.0/3.0]
     eval_args["split_threshold"]=[-1e-10]
     eval_args["positivity_epsilon"]=["one_by_sample_size"]
