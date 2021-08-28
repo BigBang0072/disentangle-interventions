@@ -6,7 +6,7 @@ from collections import defaultdict
 from toposort import toposort_flatten
 import itertools as it
 from scipy.stats import dirichlet
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 from data_handle import BnNetwork
 from non_overlap_intv_solver import DistributionHandler
@@ -806,11 +806,11 @@ if __name__=="__main__":
     )
 
     #Plotting the evaluation metrics
-    plt.plot(range(len(mse_overall_list)),mse_overall_list,"o-")
-    plt.show()
-    plt.close()
-    plt.plot(range(len(avg_logprob_list)),avg_logprob_list,"o-")
-    plt.show()
+    # plt.plot(range(len(mse_overall_list)),mse_overall_list,"o-")
+    # plt.show()
+    # plt.close()
+    # plt.plot(range(len(avg_logprob_list)),avg_logprob_list,"o-")
+    # plt.show()
 
     #Now we will solve the mixture via our methods
     pred_target_dict_ours = solver.solve()
