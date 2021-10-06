@@ -602,14 +602,25 @@ class GeneralMixtureSolver():
         all_target_pi = np.array(all_target_pi,dtype=np.float64)
         # pdb.set_trace()
 
+        #Getting the do_config hash for ease of calculating mse
+        do_config_dict = {
+                            (tuple(tnode),tuple(tcat)):tpi 
+                                for tnode,tcat,tpi in self.dist_handler.do_config
+                        }
+
         #Creating the evaluation function
-        evaluator = EvaluatePrediction(matching_weight=0.5)
+        # evaluator = EvaluatePrediction(matching_weight=0.5)
 
         #Now running the EM algorithm given number of epochs
         pred_target_dict=None
         mse_overall_list=[]
         avg_logprob_list=[]
         for enum in range(1,epochs+1):
+            #First of all we need to impose the exclusion assumption
+            print("Enforcing the Pauli's Exclusion Principle")
+            all_target_pi = self._impose_exclusion(all_target_keys,all_target_pi)
+
+            #Running one step of the EM
             print("\n\n\nRunning one EM Step:")
             all_target_pi = self._run_em_step_once(
                                         all_target_keys,
@@ -620,23 +631,39 @@ class GeneralMixtureSolver():
 
             #Returning the predicted target dict
             pred_target_dict={}
+            step_mse = 0.0
             for tidx,target in enumerate(all_target_keys):
-                pred_target_dict["t{}".format(tidx)]=[target[0],target[1],all_target_pi[tidx]]
+                tnode = tuple(target[0])
+                tcat  = tuple(target[1])
+                tpi   = all_target_pi[tidx]
+                pred_target_dict["t{}".format(tidx)]=[tnode,tcat,]
+                
+                #Calculating the mse here itself
+                delta = None
+                if (tnode,tcat) in do_config_dict:
+                    delta = tpi - do_config_dict[(tnode,tcat)]
+                else:
+                    delta = tpi
+                #Adding the contribution
+                step_mse += delta**2
+            
+            step_mse = step_mse/len(all_target_keys)
 
-            #Getting the evaluation score
-            _,_,mse_all=evaluator.get_evaluation_scores(
-                                        pred_target_dict,
-                                        self.dist_handler.do_config,
-            )
-            mse_overall_list.append(mse_all["mse_overall"])
+            # #Getting the evaluation score
+            # _,_,mse_all=evaluator.get_evaluation_scores(
+            #                             pred_target_dict,
+            #                             self.dist_handler.do_config,
+            # )
+            mse_overall_list.append(step_mse)
 
             #Next we will estimate the likelihood of the optimizer
-            avg_logprob_list.append(
-                        self._get_loglikelihood(all_target_keys,
-                                                all_target_pi,
-                                                log_epsilon,
-                        )
-            )
+            if enum%5==0:
+                avg_logprob_list.append(
+                            self._get_loglikelihood(all_target_keys,
+                                                    all_target_pi,
+                                                    log_epsilon,
+                            )
+                )
 
             #Plotting the evaluation metrics
             # if enum%5==0:
@@ -644,8 +671,51 @@ class GeneralMixtureSolver():
             #     plt.show()
             #     plt.close()
 
-
         return pred_target_dict,mse_overall_list,avg_logprob_list
+    
+    def _impose_exclusion(self,all_target_keys,all_target_pi):
+        '''
+        Since in all our work we are expecting that intervention exclusion
+        principle holds, so here also we will ensure that the least valued
+        (in terms of sum pi in all target) category for every node is zeroed
+        out. Then we will renormalize the whole distribution so that
+        it is still valid.
+        '''
+        #Initializign the node,cat importance dict
+        node_cat_value_dict = {
+                    nidx:[
+                            dict(cidx=cidx , cscore=0.0 , ptidx=[])
+                                for cidx in range(
+                                    self.base_network.card_node[self.base_network.topo_i2n[nidx]]
+                                )
+                        ]
+                            for nidx in range(len(self.base_network.topo_i2n.keys()))
+        }
+
+        #Getting the node-cat importance
+        for tidx,(tnode,tcat) in enumerate(all_target_keys):
+            #Going through every node and category pair in this target
+            for tnidx,tcidx in zip(tnode,tcat):
+                #Adding the score
+                node_cat_value_dict[tnidx][tcidx]["cscore"]+=all_target_pi[tidx]
+                #Keeping track of the location if push come to shove and we need to nullify it
+                node_cat_value_dict[tnidx][tcidx]["ptidx"].append(tidx)
+        
+        #Now we need to find the category to remove for each node
+        for nidx,clist in node_cat_value_dict.items():
+            #Getting the "minimum-guy"
+            min_citem = min(clist,key=lambda x:x["cscore"]) 
+            print("For Exclusion Principle: nidx:{}\tcidx:{}".format(nidx,min_citem["cidx"]))
+
+            #Now mulifing all the target pis for this category of this node
+            for tidx in min_citem["ptidx"]:
+                all_target_pi[tidx]=0.0
+
+        #Renormalizing the pi's
+        print("Renormalizing after exclusion principle enforcement")
+        all_target_pi = all_target_pi / np.sum(all_target_pi)
+
+        return all_target_pi
 
     def _get_loglikelihood(self,all_target_keys,all_target_pi,log_epsilon):
         '''
@@ -672,7 +742,7 @@ class GeneralMixtureSolver():
             overall_logprob += np.log(sample_prob_sum+log_epsilon)
 
         return overall_logprob/num_examples
-
+    
     def _run_em_step_once(self,all_target_keys,all_target_pi):
         '''
         This function will run the em step once by calculating the
