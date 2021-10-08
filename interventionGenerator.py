@@ -8,7 +8,11 @@ class InterventionGenerator():
     '''
     This class will generate the random intervention for mixture generation
     possibly to cover the full space of interventions either with uniform
-    probability or with some bias.
+    probability or with some bias. 
+
+    Change Log: 9/10/21
+    Now we are also giving option to have an uppoer bound on the order of
+    the intervention possible.
 
     Design:
         1. Given the sparsity |S| independently  we generate each component:
@@ -28,6 +32,7 @@ class InterventionGenerator():
     '''
 
     def __init__(self,S,max_nodes,max_cat,
+                    max_target_order,
                     num_node_temperature,
                     pi_dist_type,pi_alpha_scale,
                     max_unique_tires=3):
@@ -35,6 +40,7 @@ class InterventionGenerator():
         self.S = S
         self.max_nodes = max_nodes
         self.max_cat   = max_cat
+        self.max_target_order = max_target_order
         self.num_node_temperature = num_node_temperature
         self.pi_dist_type = pi_dist_type
         self.pi_alpha_scale = pi_alpha_scale
@@ -85,7 +91,9 @@ class InterventionGenerator():
         This fucntion will generate one target location
         '''
         #First of all we have to decide on number of nodes in target
-        num_node = self._get_num_node_in_target(self.num_node_temperature)
+        num_node = self._get_num_node_in_target(self.num_node_temperature,
+                                                self.max_target_order,
+        )
 
         #Now we will select these many nodes with uniform probability
         tnodes = np.random.choice(self.max_nodes,num_node,replace=False).tolist()
@@ -106,19 +114,19 @@ class InterventionGenerator():
 
         return (tnodes,tcats)
 
-    def _get_num_node_in_target(self,temperature):
+    def _get_num_node_in_target(self,temperature,max_target_order):
         '''
         This function will generate the number of nodes on the target based
         on the boltzamann distribution:
-                exp(-n/T)
+                exp(-(n-1)/T)
         For uniform probability of all node size give T = float("inf")
         '''
-        num_dist = np.exp(-1.0*np.arange(self.max_nodes)/temperature)
+        num_dist = np.exp(-1.0*np.arange(max_target_order)/temperature)
         num_dist = num_dist/np.sum(num_dist)
 
-        num_node = np.random.choice(np.arange(1,self.max_nodes+1),
+        num_node = np.random.choice(np.arange(1,max_target_order+1),
                                     1,p=num_dist)[0]
-        assert num_node<=self.max_nodes,"Number of nodes in target large"
+        assert num_node<=max_target_order,"Number of nodes in target large"
         print("num_node:{}\tnum_dist:{}".format(num_node,num_dist))
 
         return num_node

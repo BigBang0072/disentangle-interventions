@@ -613,7 +613,7 @@ class GeneralMixtureSolver():
                         }
         
         #Having all the targets with equal prior
-#         all_target_pi = (all_target_pi*0+1)/all_target_pi.shape[0]
+        # all_target_pi = (all_target_pi*0+1)/all_target_pi.shape[0]
         #Printing the initial target pi
         print("Initialized the Intervnetion Targets")
         for tidx,target in enumerate(all_target_keys):
@@ -636,8 +636,8 @@ class GeneralMixtureSolver():
         avg_logprob_list=[]
         for enum in range(1,epochs+1):
             #First of all we need to impose the exclusion assumption
-#             print("Enforcing the Pauli's Exclusion Principle")
-#             all_target_pi = self._impose_exclusion(all_target_keys,all_target_pi)
+            # print("Enforcing the Pauli's Exclusion Principle")
+            # all_target_pi = self._impose_exclusion(all_target_keys,all_target_pi)
 
             #Running one step of the EM
             print("\n\n\nRunning one EM Step:")
@@ -888,9 +888,11 @@ if __name__=="__main__":
     # pdb.set_trace()
 
     #Getting a random internvetion
+    max_target_order = 2
     target_generator = InterventionGenerator(S=16,
                                             max_nodes=num_nodes,
                                             max_cat=node_card,
+                                            max_target_order=max_target_order,
                                             num_node_temperature=float("inf"),
                                             pi_dist_type="inverse",
                                             pi_alpha_scale=5)
@@ -919,7 +921,7 @@ if __name__=="__main__":
                             positive_sol_threshold=1e-10,
             )
     pred_target_dict_em,mse_overall_list,avg_logprob_list=solver.solve_by_em(
-                                max_target_order=num_nodes,
+                                max_target_order=max_target_order,
                                 epochs=30,
                                 log_epsilon=1e-10,
     )
@@ -932,8 +934,8 @@ if __name__=="__main__":
     # plt.show()
 
     #Now we will solve the mixture via our methods
-#     pred_target_dict_ours = solver.solve()
+    # pred_target_dict_ours = solver.solve()
 
-#     #Now lets evaluate the solution
-#     evaluator = EvaluatePrediction(matching_weight=0.5)
-#     evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
+    # #Now lets evaluate the solution
+    # evaluator = EvaluatePrediction(matching_weight=0.5)
+    # evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
