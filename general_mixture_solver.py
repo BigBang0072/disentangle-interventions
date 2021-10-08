@@ -596,6 +596,10 @@ class GeneralMixtureSolver():
                                     there could be upper bound on order
                                     of the interventions.
         '''
+        import random
+        random.seed(142345321)
+        np.random.seed(2142453)
+        
         #First of all we generate all possible internvetion targets
         all_target_dict = self._generate_all_possible_targets(max_target_order)
         all_target_keys,all_target_pi = zip(*all_target_dict.items())
@@ -607,6 +611,21 @@ class GeneralMixtureSolver():
                             (tuple(tnode),tuple(tcat)):tpi 
                                 for tnode,tcat,tpi in self.dist_handler.do_config
                         }
+        
+        #Having all the targets with equal prior
+#         all_target_pi = (all_target_pi*0+1)/all_target_pi.shape[0]
+        #Printing the initial target pi
+        print("Initialized the Intervnetion Targets")
+        for tidx,target in enumerate(all_target_keys):
+            target_loc = (tuple(target[0]),tuple(target[1]))
+            atpi = self.dist_handler.do_config[target_loc] if target_loc in self.dist_handler.do_config else 0.0
+            print("tnode:{}\ttcats:{}\tatpi:{}\titpi:{}".format(
+                                        target[0],
+                                        target[1],
+                                        atpi,
+                                        all_target_pi[tidx],
+                )
+            )
 
         #Creating the evaluation function
         # evaluator = EvaluatePrediction(matching_weight=0.5)
@@ -617,8 +636,8 @@ class GeneralMixtureSolver():
         avg_logprob_list=[]
         for enum in range(1,epochs+1):
             #First of all we need to impose the exclusion assumption
-            print("Enforcing the Pauli's Exclusion Principle")
-            all_target_pi = self._impose_exclusion(all_target_keys,all_target_pi)
+#             print("Enforcing the Pauli's Exclusion Principle")
+#             all_target_pi = self._impose_exclusion(all_target_keys,all_target_pi)
 
             #Running one step of the EM
             print("\n\n\nRunning one EM Step:")
@@ -626,7 +645,7 @@ class GeneralMixtureSolver():
                                         all_target_keys,
                                         all_target_pi
             )
-            print("Target Pi:\n")
+            print("Target Pi:")
             pprint(all_target_pi)
 
             #Returning the predicted target dict
@@ -640,14 +659,26 @@ class GeneralMixtureSolver():
                 
                 #Calculating the mse here itself
                 delta = None
+                atpi = 0.0
                 if (tnode,tcat) in do_config_dict:
                     delta = tpi - do_config_dict[(tnode,tcat)]
+                    atpi = do_config_dict[(tnode,tcat)]
                 else:
                     delta = tpi
                 #Adding the contribution
                 step_mse += delta**2
+                
+                #Logging the estimated pi value
+                print("tnode:{}\ttcat:{}\tatpi:{:.3f}\tptpi:{:.3f}".format(
+                                            tnode,
+                                            tcat,
+                                            atpi,
+                                            tpi
+                     )
+                )
             
             step_mse = step_mse/len(all_target_keys)
+            print("Step MSE: {}".format(step_mse))
 
             # #Getting the evaluation score
             # _,_,mse_all=evaluator.get_evaluation_scores(
@@ -664,12 +695,30 @@ class GeneralMixtureSolver():
                                                     log_epsilon,
                             )
                 )
+                print("Average Log probability of the learnt mixture:",avg_logprob_list[-1])
 
             #Plotting the evaluation metrics
             # if enum%5==0:
             #     plt.plot(range(len(mse_overall_list)),mse_overall_list,"o-")
             #     plt.show()
             #     plt.close()
+
+        print("===============================================")
+        pprint("STEP MSE TIMELINE")
+        pprint(mse_overall_list)
+        print("===============================================")
+        pprint("AVG LOGPROB TIMELINE")
+        pprint(avg_logprob_list)
+        print("===============================================")
+        pprint("ACTUAL DO CONFIG")
+        pprint(do_config_dict)
+        print("===============================================")
+        pprint("PRED TARGET DICT")
+        pprint(pred_target_dict)
+        print("===============================================")
+        pprint("PRED TARGET PI")
+        pprint(all_target_pi)
+        
 
         return pred_target_dict,mse_overall_list,avg_logprob_list
     
@@ -824,8 +873,8 @@ class GeneralMixtureSolver():
 
 
 if __name__=="__main__":
-    num_nodes=2
-    node_card=2
+    num_nodes=4
+    node_card=4
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
@@ -852,7 +901,7 @@ if __name__=="__main__":
     mixture_sample_size=float("inf")
     mixture_samples=None
     if not infinite_sample_limit:
-        mixture_sample_size=100
+        mixture_sample_size=10000
         mixture_samples = base_network.generate_sample_from_mixture(
                                             do_config=do_config,
                                             sample_size=mixture_sample_size)
@@ -883,8 +932,8 @@ if __name__=="__main__":
     # plt.show()
 
     #Now we will solve the mixture via our methods
-    pred_target_dict_ours = solver.solve()
+#     pred_target_dict_ours = solver.solve()
 
-    #Now lets evaluate the solution
-    evaluator = EvaluatePrediction(matching_weight=0.5)
-    evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
+#     #Now lets evaluate the solution
+#     evaluator = EvaluatePrediction(matching_weight=0.5)
+#     evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
