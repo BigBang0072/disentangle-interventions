@@ -7,6 +7,8 @@ from toposort import toposort_flatten
 import itertools as it
 from scipy.stats import dirichlet
 # import matplotlib.pyplot as plt
+import multiprocessing as mp
+from multiprocessing import Pool
 
 from data_handle import BnNetwork
 from non_overlap_intv_solver import DistributionHandler
@@ -576,7 +578,7 @@ class GeneralMixtureSolver():
 
         return split_pis
 
-    def solve_by_em(self,max_target_order,epochs,log_epsilon):
+    def solve_by_em(self,max_target_order,epochs,log_epsilon,num_parallel_calls):
         '''
         This function will take a different route to get the mixing coefficient
         by estimating the mixing coefficients by Expectation Maximization.
@@ -643,7 +645,8 @@ class GeneralMixtureSolver():
             print("\n\n\nRunning one EM Step:")
             all_target_pi = self._run_em_step_once(
                                         all_target_keys,
-                                        all_target_pi
+                                        all_target_pi,
+                                        num_parallel_calls
             )
             print("Target Pi:")
             pprint(all_target_pi)
@@ -792,40 +795,48 @@ class GeneralMixtureSolver():
 
         return overall_logprob/num_examples
     
-    def _run_em_step_once(self,all_target_keys,all_target_pi):
+    def _run_em_step_once(self,all_target_keys,all_target_pi,num_parallel_calls):
         '''
         This function will run the em step once by calculating the
         posterior and then updating the model parameters.
         '''
-        posterior_pi = all_target_pi * 0.0
+        #Caching all the targets so that we dont recreate do-graph for each example
+        sample_point = self.dist_handler.mixture_samples.iloc[0]
+        _,self.dist_handler = em_step_worker_kernel(dict(
+                                                    all_target_keys=all_target_keys,
+                                                    all_target_pi=all_target_pi,
+                                                    point=sample_point,
+                                                    dist_handler=self.dist_handler
+        ))
 
         #Go through all the examples one by one to get posterior
         num_examples = self.dist_handler.mixture_samples.shape[0]
         #This could be parallelized on multiple threads.
+        #Creating the task list
+        task_config_list = []
         for eidx in range(num_examples):
             # print("Getting target distribution for sample: ",eidx,all_target_pi.shape)
             #Getting the point/"example" from the df
             point = self.dist_handler.mixture_samples.iloc[eidx]
-
-            #get the probability of this sample on all targets
-            sample_posterior_pi = all_target_pi * 0.0
-            for tidx,target in enumerate(all_target_keys):
-                tprob = self.dist_handler.get_intervention_probability(
-                                            sample=point,
-                                            eval_do=list(target)
-                )
-                #Updating the prob in sample _posterior_pi
-                sample_posterior_pi[tidx]=tprob
-
-            #Next we multiply the pis and normalize
-            sample_posterior_pi = sample_posterior_pi*all_target_pi
-            sample_posterior_pi = sample_posterior_pi/np.sum(sample_posterior_pi)
-
-            #Adding the contribution of this posterior controbution
-            posterior_pi = posterior_pi + sample_posterior_pi
-
-        #Now we need to average the posterior pi
-        posterior_pi = posterior_pi / num_examples
+            task_config_list.append(dict(
+                                        all_target_keys = all_target_keys,
+                                        all_target_pi = all_target_pi,
+                                        point = point,
+                                        dist_handler = self.dist_handler
+            ))
+        
+        #Now running the job in parallel
+        with Pool(num_parallel_calls) as p:
+            production = p.map(em_step_worker_kernel,task_config_list)
+        
+        #Now getting the average posterior porbability
+        all_posterior_pi = np.stack(
+                    [
+                        sample_posterior_pi for sample_posterior_pi,_ in production
+                    ],
+                    axis=0
+        )
+        posterior_pi = np.mean(all_posterior_pi,axis=0)
 
         return posterior_pi
 
@@ -870,6 +881,35 @@ class GeneralMixtureSolver():
             all_target_dict[target]=mixing_coeffs[tidx]
 
         return all_target_dict
+
+def em_step_worker_kernel(config):
+    '''
+    This function is the worker kernel which will be run by each of the example
+    individually to get the strength of the mixing coefficient from their perspective
+    and return the posteriaor porbability from of each mixing coefficient wrt to them.
+    '''
+    #Getting the required metadata to be used for finding the posterior porb
+    all_target_keys = config["all_target_keys"]
+    all_target_pi   = config["all_target_pi"]
+    point           = config["point"]
+    dist_handler    = config["dist_handler"]
+
+    #Getting the posterior porbability
+    #get the probability of this sample on all targets
+    sample_posterior_pi = all_target_pi * 0.0
+    for tidx,target in enumerate(all_target_keys):
+        tprob = dist_handler.get_intervention_probability(
+                                    sample=point,
+                                    eval_do=list(target)
+        )
+        #Updating the prob in sample _posterior_pi
+        sample_posterior_pi[tidx]=tprob
+
+    #Next we multiply the pis and normalize
+    sample_posterior_pi = sample_posterior_pi*all_target_pi
+    sample_posterior_pi = sample_posterior_pi/np.sum(sample_posterior_pi)
+
+    return sample_posterior_pi,dist_handler
 
 
 if __name__=="__main__":
@@ -924,6 +964,7 @@ if __name__=="__main__":
                                 max_target_order=max_target_order,
                                 epochs=30,
                                 log_epsilon=1e-10,
+                                num_parallel_calls=4
     )
 
     #Plotting the evaluation metrics
