@@ -900,17 +900,32 @@ class GeneralMixtureSolver():
         zero_config_list = self._get_all_exclusion_config()
 
         #Now running the optimization for all possible zero configs
+        all_result_list = []
         for zero_config in zero_config_list:
+            print("\n\n======================================")
             print("Starting new run for zero config:")
             pprint(zero_config)
 
-            self.solve_for_a_exclusion_config(exclusion_config=zero_config,
+            opt_result = self.solve_for_a_exclusion_config(exclusion_config=zero_config,
                                                 zero_eps=zero_eps,
                                                 A=A,
                                                 b=b,
                                                 all_target_list=all_target_list,
                                                 actual_target_dict=actual_target_dict
             )
+            
+            #Keeping track of result
+            all_result_list.append(dict(
+                                           zero_config=zero_config,
+                                           opt_result = opt_result
+            ))
+        
+        #Getting the best configuration
+        all_result_list.sort(key=lambda x: x["opt_result"]["fun"],reverse=True)
+        pprint(all_result_list)
+        print("===================================")
+        print("Actual Target Dict:")
+        pprint(actual_target_dict)
 
     def _get_full_Ab_matrix(self,):
         '''
@@ -932,6 +947,10 @@ class GeneralMixtureSolver():
         #Getting all the point of evaluation
         all_point_list = []
         for target in all_target_list:
+            #Skipping the lower order marginals
+            if len(target[0])<len(self.base_network.topo_i2n):
+                continue
+            
             #Convert the target to point
             point = {
                     self.base_network.topo_i2n[tidx]:cidx
@@ -958,17 +977,22 @@ class GeneralMixtureSolver():
             for cidx in range(A.shape[1]):
                 #Getting the entry for this location
                 target = all_target_list[cidx]
+                print("Filling up the A: point:{}\ttarget:{}".format(point,target))
                 p_t = self.dist_handler.get_intervention_probability(
                                                 sample = point,
                                                 eval_do = [target[0],target[1]]
                 )
-                print("Filling up the A: point:{}\ttarget:{}".format(point,target))
+                
                 A[ridx,cidx]= p_t - p
         
         #Getting the actual mixxing coefficient dict
         actual_target_dict={key:0.0 for key in all_target_dict.keys()}
-        for tnodes,tcats,atpi in self.dist_handler.do_config.values():
+        for tnodes,tcats,atpi in self.dist_handler.do_config:
             actual_target_dict[(tuple(tnodes),tuple(tcats))] = atpi
+        print("Actual Target Dict")
+        pprint(actual_target_dict)
+        print("All Target List")
+        pprint(all_target_list)
         
         return A,b,all_target_list,actual_target_dict
     
@@ -988,7 +1012,7 @@ class GeneralMixtureSolver():
 
             #Calculating the mse too
             step_mse = 0.0
-            for tidx,target in all_target_list:
+            for tidx,target in enumerate(all_target_list):
                 atpi = actual_target_dict[target]
                 ptpi = x[tidx]
 
@@ -1035,10 +1059,11 @@ class GeneralMixtureSolver():
         opt_result = minimize(optimization_func,pi_trial,
                                 method = "SLSQP",
                                 bounds=bounds,
-                                constrains=constraints
+                                constraints=constraints
         )
 
         pprint(opt_result)
+        return opt_result
 
     def _get_all_exclusion_config(self,):
         '''
@@ -1055,11 +1080,11 @@ class GeneralMixtureSolver():
         zero_settings = it.product(*cidx_list)
 
         #Creting all possible zero config
-        zero_config_list={}
+        zero_config_list=[]
         for setting in zero_settings:
             config = {
                         nidx:setting[nidx] 
-                            for nidx in range(len(self.base_network.topi_i2n))
+                            for nidx in range(len(self.base_network.topo_i2n))
             }
             #Appending to the zero config list
             zero_config_list.append(config)
@@ -1097,7 +1122,7 @@ def em_step_worker_kernel(config):
 
 
 if __name__=="__main__":
-    num_nodes=2
+    num_nodes=4
     node_card=3
     #Creating a random graph
     from graph_generator import GraphGenerator
@@ -1164,7 +1189,7 @@ if __name__=="__main__":
     solver.solve_by_brute_force_sys_eq(zero_eps=1e-3)
 
     #Now we will solve the mixture via our methods
-    # pred_target_dict_ours = solver.solve()
-    # #Now lets evaluate the solution
-    # evaluator = EvaluatePrediction(matching_weight=0.5)
-    # evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
+#     pred_target_dict_ours = solver.solve()
+#     #Now lets evaluate the solution
+#     evaluator = EvaluatePrediction(matching_weight=0.5)
+#     evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
