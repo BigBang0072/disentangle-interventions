@@ -912,7 +912,6 @@ class GeneralMixtureSolver():
                                                 actual_target_dict=actual_target_dict
             )
 
-    
     def _get_full_Ab_matrix(self,):
         '''
         This function will genrerate the full A matrix with all the possilbe intervnetion 
@@ -924,6 +923,10 @@ class GeneralMixtureSolver():
         all_target_dict = self._generate_all_possible_targets(
                                         max_target_order=len(self.base_network.topo_i2n)
         )
+        #Removing the base distribution 
+        del all_target_dict[((),())]
+        
+        #Getting the names of the targets
         all_target_list = list(all_target_dict.keys())
 
         #Getting all the point of evaluation
@@ -947,7 +950,7 @@ class GeneralMixtureSolver():
             pmix = self.dist_handler.get_mixture_probability(point,infinte_sample=False)
             p    = self.dist_handler.get_intervention_probability(
                                                     sample=point,
-                                                    eval_do=((),())
+                                                    eval_do=[(),()]
             )
             b[ridx] = pmix - p
 
@@ -957,7 +960,7 @@ class GeneralMixtureSolver():
                 target = all_target_list[cidx]
                 p_t = self.dist_handler.get_intervention_probability(
                                                 sample = point,
-                                                eval_do = (target[0],target[1])
+                                                eval_do = [target[0],target[1]]
                 )
                 print("Filling up the A: point:{}\ttarget:{}".format(point,target))
                 A[ridx,cidx]= p_t - p
@@ -1094,8 +1097,8 @@ def em_step_worker_kernel(config):
 
 
 if __name__=="__main__":
-    num_nodes=4
-    node_card=4
+    num_nodes=2
+    node_card=3
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
@@ -1124,7 +1127,7 @@ if __name__=="__main__":
     mixture_sample_size=float("inf")
     mixture_samples=None
     if not infinite_sample_limit:
-        mixture_sample_size=10000
+        mixture_sample_size=1000
         mixture_samples = base_network.generate_sample_from_mixture(
                                             do_config=do_config,
                                             sample_size=mixture_sample_size)
