@@ -883,7 +883,7 @@ class GeneralMixtureSolver():
 
         return all_target_dict
     
-    def solve_by_brute_force_sys_eq(self,zero_eps):
+    def solve_by_brute_force_sys_eq(self,zero_eps,num_parallel_calls):
         '''
         Here we will solve the problem via system of equation over all possible 
         intervnetion targets and marginal which are possible.
@@ -900,25 +900,23 @@ class GeneralMixtureSolver():
         zero_config_list = self._get_all_exclusion_config()
 
         #Now running the optimization for all possible zero configs
-        all_result_list = []
+        all_problem_list=[]
         for zero_config in zero_config_list:
-            print("\n\n======================================")
-            print("Starting new run for zero config:")
-            pprint(zero_config)
-
-            opt_result = self.solve_for_a_exclusion_config(exclusion_config=zero_config,
-                                                zero_eps=zero_eps,
-                                                A=A,
-                                                b=b,
-                                                all_target_list=all_target_list,
-                                                actual_target_dict=actual_target_dict
+            all_problem_list.append(
+                            dict(
+                                exclusion_config = zero_config,
+                                zero_eps = zero_eps,
+                                A=A,
+                                b=b,
+                                all_target_list=all_target_list,
+                                actual_target_dict=actual_target_dict
+                            )
             )
+        
+        #Now we will start the solution in parallel
+        with Pool(num_parallel_calls) as p:
+            all_result_list = p.map(solve_for_a_exclusion_config_worker_kernel,all_problem_list)
             
-            #Keeping track of result
-            all_result_list.append(dict(
-                                           zero_config=zero_config,
-                                           opt_result = opt_result
-            ))
         
         #Getting the best configuration
         all_result_list.sort(key=lambda x: x["opt_result"]["fun"],reverse=True)
@@ -1005,75 +1003,6 @@ class GeneralMixtureSolver():
         
         return A,b,all_target_list,actual_target_dict
     
-    def solve_for_a_exclusion_config(self,exclusion_config,zero_eps,A,b,
-                                    all_target_list,actual_target_dict):
-        '''
-        Given a particular exclusion setting, we want to solve the system of equation and
-        get the final result.
-
-        exclusion_config = {
-                                nidx : blacklisted_cidx
-        }
-        '''
-        def optimization_func(x,):
-            #Getting the residual
-            residual = np.sum((np.matmul(A,x)-b)**2)
-
-            #Calculating the mse too
-            step_mse = 0.0
-            for tidx,target in enumerate(all_target_list):
-                atpi = actual_target_dict[target]
-                ptpi = x[tidx]
-
-                step_mse += (atpi-ptpi)**2
-            step_mse = step_mse/x.shape[0]
-
-            #print("residual:{:0.3f}\tstep_mse:{:0.3f}".format(residual,step_mse))
-
-            return residual 
-        
-        def get_excluded_target_pi_sum(x,):
-            #Getting the index of target where the excluded category exist
-            pi_sum = 0.0
-            for ctidx,target in enumerate(all_target_list):
-                for tnidx,tcat in zip(target[0],target[1]):
-                    if exclusion_config[tnidx]==tcat:
-                        pi_sum+=x[ctidx]
-                        break
-            
-            #print("eclusion violation level: {}".format(pi_sum))
-            return zero_eps-pi_sum
-        
-        def get_sum_of_pis(x,):
-            pi_sum = np.sum(x)
-            #print("total pi sum: {}".format(pi_sum))
-
-            return 1-pi_sum
-        
-        #Now we will define the constraints
-        constraints = [
-                            {
-                                "type":"ineq",
-                                "fun": get_sum_of_pis
-                            },
-                            {
-                                "type":"ineq",
-                                "fun": get_excluded_target_pi_sum
-                            }
-        ]
-        bounds = [(0.0,1.0)]*A.shape[1]
-
-        #Running the optimizer
-        pi_trial = np.ones((A.shape[1],))/A.shape[1]
-        opt_result = minimize(optimization_func,pi_trial,
-                                method = "SLSQP",
-                                bounds=bounds,
-                                constraints=constraints
-        )
-
-        pprint(opt_result)
-        return opt_result
-
     def _get_all_exclusion_config(self,):
         '''
         This will generate all possible ways we could ipose paulis exclusion 
@@ -1128,6 +1057,90 @@ def em_step_worker_kernel(config):
     sample_posterior_pi = sample_posterior_pi/np.sum(sample_posterior_pi)
 
     return sample_posterior_pi,dist_handler
+
+def solve_for_a_exclusion_config_worker_kernel(worker_config):
+    '''
+    Given a particular exclusion setting, we want to solve the system of equation and
+    get the final result.
+
+    exclusion_config = {
+                            nidx : blacklisted_cidx
+    }
+    '''
+    exclusion_config    = worker_config["exclusion_config"]
+    zero_eps            = worker_config["zero_eps"]
+    A                   = worker_config["A"]
+    b                   = worker_config["b"]
+    all_target_list     = worker_config["all_target_list"]
+    actual_target_dict  = worker_config["actual_target_dict"]
+
+    print("\n\n======================================")
+    print("Starting new run for zero config:")
+    pprint(exclusion_config)
+
+    def optimization_func(x,):
+        #Getting the residual
+        residual = np.sum((np.matmul(A,x)-b)**2)
+
+        #Calculating the mse too
+        step_mse = 0.0
+        for tidx,target in enumerate(all_target_list):
+            atpi = actual_target_dict[target]
+            ptpi = x[tidx]
+
+            step_mse += (atpi-ptpi)**2
+        step_mse = step_mse/x.shape[0]
+
+        #print("residual:{:0.3f}\tstep_mse:{:0.3f}".format(residual,step_mse))
+
+        return residual 
+    
+    def get_excluded_target_pi_sum(x,):
+        #Getting the index of target where the excluded category exist
+        pi_sum = 0.0
+        for ctidx,target in enumerate(all_target_list):
+            for tnidx,tcat in zip(target[0],target[1]):
+                if exclusion_config[tnidx]==tcat:
+                    pi_sum+=x[ctidx]
+                    break
+        
+        #print("eclusion violation level: {}".format(pi_sum))
+        return zero_eps-pi_sum
+    
+    def get_sum_of_pis(x,):
+        pi_sum = np.sum(x)
+        #print("total pi sum: {}".format(pi_sum))
+
+        return 1-pi_sum
+    
+    #Now we will define the constraints
+    constraints = [
+                        {
+                            "type":"ineq",
+                            "fun": get_sum_of_pis
+                        },
+                        {
+                            "type":"ineq",
+                            "fun": get_excluded_target_pi_sum
+                        }
+    ]
+    bounds = [(0.0,1.0)]*A.shape[1]
+
+    #Running the optimizer
+    pi_trial = np.ones((A.shape[1],))/A.shape[1]
+    opt_result = minimize(optimization_func,pi_trial,
+                            method = "SLSQP",
+                            bounds=bounds,
+                            constraints=constraints
+    )
+
+    pprint(opt_result)
+
+    result_dict = dict(
+                    zero_config = exclusion_config,
+                    opt_result=opt_result,
+    )
+    return result_dict
 
 
 if __name__=="__main__":
