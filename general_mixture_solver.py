@@ -691,7 +691,7 @@ class GeneralMixtureSolver():
             mse_overall_list.append(step_mse)
 
             #Next we will estimate the likelihood of the optimizer
-            if enum%5==0:
+            if enum%9==0:
                 avg_logprob_list.append(
                             self._get_loglikelihood(all_target_keys,
                                                     all_target_pi,
@@ -706,21 +706,21 @@ class GeneralMixtureSolver():
             #     plt.show()
             #     plt.close()
 
-        print("===============================================")
-        pprint("STEP MSE TIMELINE")
-        pprint(mse_overall_list)
-        print("===============================================")
-        pprint("AVG LOGPROB TIMELINE")
-        pprint(avg_logprob_list)
-        print("===============================================")
-        pprint("ACTUAL DO CONFIG")
-        pprint(do_config_dict)
-        print("===============================================")
-        pprint("PRED TARGET DICT")
-        pprint(pred_target_dict)
-        print("===============================================")
-        pprint("PRED TARGET PI")
-        pprint(all_target_pi)
+            print("===============================================")
+            pprint("STEP MSE TIMELINE")
+            pprint(mse_overall_list)
+            print("===============================================")
+            pprint("AVG LOGPROB TIMELINE")
+            pprint(avg_logprob_list)
+            print("===============================================")
+            pprint("ACTUAL DO CONFIG")
+            pprint(do_config_dict)
+            print("===============================================")
+            pprint("PRED TARGET DICT")
+            pprint(pred_target_dict)
+            print("===============================================")
+            pprint("PRED TARGET PI")
+            pprint(all_target_pi)
         
 
         return pred_target_dict,mse_overall_list,avg_logprob_list
@@ -913,8 +913,8 @@ def em_step_worker_kernel(config):
 
 
 if __name__=="__main__":
-    num_nodes=4
-    node_card=4
+    num_nodes=10
+    node_card=2
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
@@ -964,7 +964,7 @@ if __name__=="__main__":
                                 max_target_order=max_target_order,
                                 epochs=30,
                                 log_epsilon=1e-10,
-                                num_parallel_calls=4
+                                num_parallel_calls=5
     )
 
     #Plotting the evaluation metrics
@@ -975,8 +975,8 @@ if __name__=="__main__":
     # plt.show()
 
     #Now we will solve the mixture via our methods
-    # pred_target_dict_ours = solver.solve()
+    pred_target_dict_ours = solver.solve()
 
-    # #Now lets evaluate the solution
-    # evaluator = EvaluatePrediction(matching_weight=0.5)
-    # evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
+    #Now lets evaluate the solution
+    evaluator = EvaluatePrediction(matching_weight=0.5)
+    evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
