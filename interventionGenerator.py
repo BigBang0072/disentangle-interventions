@@ -53,6 +53,7 @@ class InterventionGenerator():
         '''
         #Generating the blacklisted category for each of the node
         blist_cats = np.random.choice(self.max_cat,self.max_nodes,replace=True)
+        self.blacklist_categories = blist_cats
         print("blacklisted category of each node:")
         pprint(blist_cats)
         target_dict={}

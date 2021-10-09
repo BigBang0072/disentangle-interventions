@@ -925,7 +925,16 @@ class GeneralMixtureSolver():
         pprint(all_result_list)
         print("===================================")
         print("Actual Target Dict:")
-        pprint(actual_target_dict)
+        for tidx,target in enumerate(all_target_list):
+            print("atpi:{:0.4f}\toptpi:{:0.4f}\ttarget:{}".format(
+                                actual_target_dict[target],
+                                all_result_list[-1]["opt_result"]["x"][tidx],
+                                target
+                    )
+            )
+        print("==================================")
+        print("Optimal Balcklist Categories Found:")
+        pprint(all_result_list[-1]["zero_config"])
 
     def _get_full_Ab_matrix(self,):
         '''
@@ -1019,7 +1028,7 @@ class GeneralMixtureSolver():
                 step_mse += (atpi-ptpi)**2
             step_mse = step_mse/x.shape[0]
 
-            print("residual:{:0.3f}\tstep_mse:{:0.3f}".format(residual,step_mse))
+            #print("residual:{:0.3f}\tstep_mse:{:0.3f}".format(residual,step_mse))
 
             return residual 
         
@@ -1032,12 +1041,12 @@ class GeneralMixtureSolver():
                         pi_sum+=x[ctidx]
                         break
             
-            print("eclusion violation level: {}".format(pi_sum))
+            #print("eclusion violation level: {}".format(pi_sum))
             return zero_eps-pi_sum
         
         def get_sum_of_pis(x,):
             pi_sum = np.sum(x)
-            print("total pi sum: {}".format(pi_sum))
+            #print("total pi sum: {}".format(pi_sum))
 
             return 1-pi_sum
         
@@ -1123,7 +1132,7 @@ def em_step_worker_kernel(config):
 
 if __name__=="__main__":
     num_nodes=4
-    node_card=3
+    node_card=4
     #Creating a random graph
     from graph_generator import GraphGenerator
     generator_args={}
@@ -1152,7 +1161,7 @@ if __name__=="__main__":
     mixture_sample_size=float("inf")
     mixture_samples=None
     if not infinite_sample_limit:
-        mixture_sample_size=1000
+        mixture_sample_size=10000
         mixture_samples = base_network.generate_sample_from_mixture(
                                             do_config=do_config,
                                             sample_size=mixture_sample_size)
@@ -1187,6 +1196,8 @@ if __name__=="__main__":
 
     #Solving using the Brute Force algorithm
     solver.solve_by_brute_force_sys_eq(zero_eps=1e-3)
+    print("Actual Balcklist Categories:")
+    pprint(target_generator.blacklist_categories)
 
     #Now we will solve the mixture via our methods
 #     pred_target_dict_ours = solver.solve()
