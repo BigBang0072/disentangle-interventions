@@ -6,6 +6,7 @@ from collections import defaultdict
 from toposort import toposort_flatten
 import itertools as it
 from scipy.stats import dirichlet
+from scipy.optimize import minimize
 # import matplotlib.pyplot as plt
 import multiprocessing as mp
 from multiprocessing import Pool
@@ -881,6 +882,186 @@ class GeneralMixtureSolver():
             all_target_dict[target]=mixing_coeffs[tidx]
 
         return all_target_dict
+    
+    def solve_by_brute_force_sys_eq(self,zero_eps):
+        '''
+        Here we will solve the problem via system of equation over all possible 
+        intervnetion targets and marginal which are possible.
+
+        Additonaly, instead of leaving the search of the exlcuded catgory upto 
+        the model, we will serach over all the k^n possible zeros setting by brute
+        force trying all of them.
+
+        '''
+        #First of all we need to generate the the A matrix
+        A,b,all_target_list,actual_target_dict = self._get_full_Ab_matrix()
+
+        #Getting all possible zeroing configuration
+        zero_config_list = self._get_all_exclusion_config()
+
+        #Now running the optimization for all possible zero configs
+        for zero_config in zero_config_list:
+            print("Starting new run for zero config:")
+            pprint(zero_config)
+
+            self.solve_for_a_exclusion_config(exclusion_config=zero_config,
+                                                zero_eps=zero_eps,
+                                                A=A,
+                                                b=b,
+                                                all_target_list=all_target_list,
+                                                actual_target_dict=actual_target_dict
+            )
+
+    
+    def _get_full_Ab_matrix(self,):
+        '''
+        This function will genrerate the full A matrix with all the possilbe intervnetion 
+        and the point locations.
+                            target : t                     RHS: b
+        point : x       |  p_t(x)-p(x)  |             | p_mix(x)-p(x) |
+        '''
+        #First of all we need the whole target list
+        all_target_dict = self._generate_all_possible_targets(
+                                        max_target_order=len(self.base_network.topo_i2n)
+        )
+        all_target_list = list(all_target_dict.keys())
+
+        #Getting all the point of evaluation
+        all_point_list = []
+        for target in all_target_list:
+            #Convert the target to point
+            point = {
+                    self.base_network.topo_i2n[tidx]:cidx
+                        for tidx,cidx in zip(target[0],target[1])
+            }
+            all_point_list.append(point)
+
+        #Now we will create the full matrix
+        A = np.zeros((len(all_point_list),len(all_target_list)))
+        b = np.zeros(len(all_point_list))
+        #Filling the matrix
+        for ridx in range(A.shape[0]):
+            point = all_point_list[ridx]
+
+            #Filling the entry in the b_matrix
+            pmix = self.dist_handler.get_mixture_probability(point,infinte_sample=False)
+            p    = self.dist_handler.get_intervention_probability(
+                                                    sample=point,
+                                                    eval_do=((),())
+            )
+            b[ridx] = pmix - p
+
+            #Filling up the columns of the matrix
+            for cidx in range(A.shape[1]):
+                #Getting the entry for this location
+                target = all_target_list[cidx]
+                p_t = self.dist_handler.get_intervention_probability(
+                                                sample = point,
+                                                eval_do = (target[0],target[1])
+                )
+                print("Filling up the A: point:{}\ttarget:{}".format(point,target))
+                A[ridx,cidx]= p_t - p
+        
+        #Getting the actual mixxing coefficient dict
+        actual_target_dict={key:0.0 for key in all_target_dict.keys()}
+        for tnodes,tcats,atpi in self.dist_handler.do_config.values():
+            actual_target_dict[(tuple(tnodes),tuple(tcats))] = atpi
+        
+        return A,b,all_target_list,actual_target_dict
+    
+    def solve_for_a_exclusion_config(self,exclusion_config,zero_eps,A,b,
+                                    all_target_list,actual_target_dict):
+        '''
+        Given a particular exclusion setting, we want to solve the system of equation and
+        get the final result.
+
+        exclusion_config = {
+                                nidx : blacklisted_cidx
+        }
+        '''
+        def optimization_func(x,):
+            #Getting the residual
+            residual = np.sum((np.matmul(A,x)-b)**2)
+
+            #Calculating the mse too
+            step_mse = 0.0
+            for tidx,target in all_target_list:
+                atpi = actual_target_dict[target]
+                ptpi = x[tidx]
+
+                step_mse += (atpi-ptpi)**2
+            step_mse = step_mse/x.shape[0]
+
+            print("residual:{:0.3f}\tstep_mse:{:0.3f}".format(residual,step_mse))
+
+            return residual 
+        
+        def get_excluded_target_pi_sum(x,):
+            #Getting the index of target where the excluded category exist
+            pi_sum = 0.0
+            for ctidx,target in enumerate(all_target_list):
+                for tnidx,tcat in zip(target[0],target[1]):
+                    if exclusion_config[tnidx]==tcat:
+                        pi_sum+=x[ctidx]
+                        break
+            
+            print("eclusion violation level: {}".format(pi_sum))
+            return zero_eps-pi_sum
+        
+        def get_sum_of_pis(x,):
+            pi_sum = np.sum(x)
+            print("total pi sum: {}".format(pi_sum))
+
+            return 1-pi_sum
+        
+        #Now we will define the constraints
+        constraints = [
+                            {
+                                "type":"ineq",
+                                "fun": get_sum_of_pis
+                            },
+                            {
+                                "type":"ineq",
+                                "fun": get_excluded_target_pi_sum
+                            }
+        ]
+        bounds = [(0.0,1.0)]*A.shape[1]
+
+        #Running the optimizer
+        pi_trial = np.ones((A.shape[1],))/A.shape[1]
+        opt_result = minimize(optimization_func,pi_trial,
+                                method = "SLSQP",
+                                bounds=bounds,
+                                constrains=constraints
+        )
+
+        pprint(opt_result)
+
+    def _get_all_exclusion_config(self,):
+        '''
+        This will generate all possible ways we could ipose paulis exclusion 
+        assumption.
+        '''
+        #Generating all possible assignment of this target nodes
+        cidx_list=[range(
+                self.base_network.card_node[self.base_network.topo_i2n[nidx]]
+            )
+            for nidx in range(len(self.base_network.topo_i2n))
+        ]
+        #Getting all setting of all these nodes in this target
+        zero_settings = it.product(*cidx_list)
+
+        #Creting all possible zero config
+        zero_config_list={}
+        for setting in zero_settings:
+            config = {
+                        nidx:setting[nidx] 
+                            for nidx in range(len(self.base_network.topi_i2n))
+            }
+            #Appending to the zero config list
+            zero_config_list.append(config)
+        
+        return zero_config_list
 
 def em_step_worker_kernel(config):
     '''
@@ -960,13 +1141,14 @@ if __name__=="__main__":
                             positivity_epsilon=1.0/mixture_sample_size,
                             positive_sol_threshold=1e-10,
             )
-    pred_target_dict_em,mse_overall_list,avg_logprob_list=solver.solve_by_em(
-                                max_target_order=max_target_order,
-                                epochs=30,
-                                log_epsilon=1e-10,
-                                num_parallel_calls=4
-    )
-
+    
+    #Solving using the EM algorithm
+    # pred_target_dict_em,mse_overall_list,avg_logprob_list=solver.solve_by_em(
+    #                             max_target_order=max_target_order,
+    #                             epochs=30,
+    #                             log_epsilon=1e-10,
+    #                             num_parallel_calls=4
+    # )
     #Plotting the evaluation metrics
     # plt.plot(range(len(mse_overall_list)),mse_overall_list,"o-")
     # plt.show()
@@ -974,9 +1156,12 @@ if __name__=="__main__":
     # plt.plot(range(len(avg_logprob_list)),avg_logprob_list,"o-")
     # plt.show()
 
+
+    #Solving using the Brute Force algorithm
+    solver.solve_by_brute_force_sys_eq(zero_eps=1e-3)
+
     #Now we will solve the mixture via our methods
     # pred_target_dict_ours = solver.solve()
-
     # #Now lets evaluate the solution
     # evaluator = EvaluatePrediction(matching_weight=0.5)
     # evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
