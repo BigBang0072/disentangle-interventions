@@ -183,6 +183,31 @@ class EvaluatePrediction():
         assert 0<=matching_score<=1,"convex sum is in convex set"
 
         return matching_score
+    
+    def threshold_target_dict(self,target_dict,zero_threshold):
+        '''
+        This fucntion will threshold the target dictupto the given threshold
+        such that all the targets below the threshold are made zero and the
+        rest of the targets will be renormalized to be the valid probability.
+        '''
+        rest_sum = 0.0
+        dead_target_names = []
+        for tname,target_config in target_dict.items():
+            if target_config[-1]<zero_threshold:
+                dead_target_names.append(tname)
+            else:
+                rest_sum+=target_config[-1]
+        
+        #Now we will remove the targets which are useless
+        for dtname in dead_target_names:
+            del target_dict[dtname]
+        
+        #Now its term for renormalization
+        for tname in target_dict.keys():
+            target_dict[tname][-1] /=rest_sum
+        
+
+        return target_dict
 
 if __name__=="__main__":
     #now lets test our evaluator

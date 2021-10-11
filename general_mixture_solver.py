@@ -934,6 +934,16 @@ class GeneralMixtureSolver():
         print("Optimal Balcklist Categories Found:")
         pprint(all_result_list[-1]["zero_config"])
 
+        #Collecting all the result in standard pred_target_dict
+        pred_target_dict = {}
+        for tidx,target in enumerate(all_target_list):
+            pred_target_dict["pt{}".format(tidx)] = (
+                                                        target[0],
+                                                        target[1],
+                                                        all_result_list[-1]["opt_result"]["x"][tidx]
+                                                    )
+        return pred_target_dict
+
     def _get_full_Ab_matrix(self,):
         '''
         This function will genrerate the full A matrix with all the possilbe intervnetion 
@@ -1159,7 +1169,7 @@ if __name__=="__main__":
     # pdb.set_trace()
 
     #Getting a random internvetion
-    max_target_order = 2
+    max_target_order = num_nodes
     target_generator = InterventionGenerator(S=16,
                                             max_nodes=num_nodes,
                                             max_cat=node_card,
@@ -1183,7 +1193,7 @@ if __name__=="__main__":
     solver = GeneralMixtureSolver(
                             base_network=base_network,
                             do_config=do_config,
-                            infinite_sample_limit=True,
+                            infinite_sample_limit=infinite_sample_limit,
                             base_samples=None,
                             mixture_samples=mixture_samples,
                             pi_threshold=(1/16.0)*(0.25),
@@ -1207,13 +1217,32 @@ if __name__=="__main__":
     # plt.show()
 
 
+    #Zero Threshold : The ones below this will be considered as worn out!
+    zero_threshold = 1e-3
+
     #Solving using the Brute Force algorithm
-    solver.solve_by_brute_force_sys_eq(zero_eps=1e-3)
+    pred_target_dict_brute = solver.solve_by_brute_force_sys_eq(
+                                                        zero_eps=zero_threshold, 
+                                                        num_parallel_calls=4
+    )
     print("Actual Balcklist Categories:")
     pprint(target_generator.blacklist_categories)
 
+
+
     #Now we will solve the mixture via our methods
-#     pred_target_dict_ours = solver.solve()
-#     #Now lets evaluate the solution
-#     evaluator = EvaluatePrediction(matching_weight=0.5)
-#     evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
+    pred_target_dict_ours = solver.solve()
+
+
+    #Now lets evaluate the solution
+    evaluator = EvaluatePrediction(matching_weight=0.5)
+    #Thresholding the predicted dicts
+    pred_target_dict_brute = evaluator.threshold_target_dict(pred_target_dict_brute,zero_threshold)
+    pred_target_dict_ours  = evaluator.threshold_target_dict(pred_target_dict_ours,zero_threshold)
+
+
+    #Getting the evaluation score
+    evaluation_brute = evaluator.get_evaluation_scores(pred_target_dict_brute,do_config)
+    evaluation_ours = evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
+
+
