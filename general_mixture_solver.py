@@ -1244,5 +1244,14 @@ if __name__=="__main__":
     #Getting the evaluation score
     evaluation_brute = evaluator.get_evaluation_scores(pred_target_dict_brute,do_config)
     evaluation_ours = evaluator.get_evaluation_scores(pred_target_dict_ours,do_config)
+    
+    
+    print("===================================")
+    print("Brute Result:")
+    pprint(evaluation_brute)
+    print("===================================")
+    print("Ours Result:")
+    pprint(evaluation_ours)
+    print("===================================")
 
 

@@ -204,7 +204,10 @@ class EvaluatePrediction():
         
         #Now its term for renormalization
         for tname in target_dict.keys():
-            target_dict[tname][-1] /=rest_sum
+            target_config = list(target_dict[tname])
+            target_config[-1] /=rest_sum
+            
+            target_dict[tname] = tuple(target_config)
         
 
         return target_dict
